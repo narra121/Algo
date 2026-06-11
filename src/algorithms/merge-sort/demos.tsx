@@ -257,7 +257,7 @@ function insertionSteps(): Step<InsertionState>[] {
     const summaryShifts = runningShifts - beforeSummary
     steps.push({
       state: { arr: [...a], outerI: 5, insertX: null, scanJ: -1, totalShifts: runningShifts, phase: 'summary' },
-      description: `Elements i = 2 to 5 ([43, 3, 9, 82]) inserted in turn — ${summaryShifts} more shifts. 3 slid past two neighbors; 9 past three; 43 and 82 needed none and zero shifts respectively. Running total: ${runningShifts} shifts, sorted prefix now [${a.slice(0, 6).join(', ')}].`,
+      description: `Elements i = 2 to 5 ([43, 3, 9, 82]) inserted in turn — ${summaryShifts} more shifts. 3 slid past three neighbors; 9 past three; 43 and 82 needed no shifts at all. Running total: ${runningShifts} shifts, sorted prefix now [${a.slice(0, 6).join(', ')}].`,
       codeLine: 0,
     })
   }
@@ -296,7 +296,7 @@ function insertionSteps(): Step<InsertionState>[] {
     const x = a[i]
     steps.push({
       state: { arr: [...a], outerI: i, insertX: x, scanJ: i, totalShifts: runningShifts, phase: 'pick' },
-      description: `i = ${i}: pick x = ${x} — the last and smallest remaining value. Sorted prefix: [${a.slice(0, i).join(', ')}]. Every element is larger; ${x} must crawl the full ${shifts[i - 1]} slots.`,
+      description: `i = ${i}: pick x = ${x} — the last and smallest remaining value. Sorted prefix: [${a.slice(0, i).join(', ')}]. Six of the seven prefix values are larger; ${x} must crawl ${shifts[i - 1]} slots to its place.`,
       codeLine: 1,
     })
     let j = i - 1
@@ -305,7 +305,9 @@ function insertionSteps(): Step<InsertionState>[] {
       runningShifts++
       steps.push({
         state: { arr: [...a], outerI: i, insertX: x, scanJ: j, totalShifts: runningShifts, phase: 'shift' },
-        description: `${a[j + 1]} > ${x} — shift right (shift #${runningShifts}). ${x} still needs to pass ${j} more value${j !== 1 ? 's' : ''}.`,
+        description: j === 1 && a[j - 1] <= x
+          ? `${a[j + 1]} > ${x} — shift right (shift #${runningShifts}). 9 steps aside — and 3, ahead of it, is smaller than ${x}, so the slide ends here.`
+          : `${a[j + 1]} > ${x} — shift right (shift #${runningShifts}). ${x} still needs to pass ${j} more value${j !== 1 ? 's' : ''}.`,
         codeLine: 3,
       })
       j--
@@ -337,7 +339,7 @@ function InsertionViz({ step }: { step: Step<InsertionState> }) {
         {phase === 'pick' && `i = ${outerI} · picking x = ${insertX} · shifts so far = ${totalShifts}`}
         {phase === 'shift' && `shifting right · x = ${insertX} · shifts so far = ${totalShifts}`}
         {phase === 'place' && `placed · shifts so far = ${totalShifts}`}
-        {phase === 'summary' && `passes 2–5 done · shifts so far = ${totalShifts}`}
+        {phase === 'summary' && `i = 2..5 inserted · shifts so far = ${totalShifts}`}
         {phase === 'verdict' && `sorted · ${totalShifts} total shifts`}
       </VizCaption>
       <Cells
