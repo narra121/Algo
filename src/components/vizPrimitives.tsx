@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 export interface CellPointer {
   label: string
-  tone: 'mint' | 'amber'
+  tone: 'mint' | 'amber' | 'rose' | 'sky'
 }
 
 /**
@@ -40,7 +40,7 @@ export function VizCaption({ children }: { children: ReactNode }) {
   return <div className="viz-caption">{children}</div>
 }
 
-export function Legend({ items }: { items: { tone?: 'mint' | 'amber'; label: string }[] }) {
+export function Legend({ items }: { items: { tone?: 'mint' | 'amber' | 'rose' | 'sky'; label: string }[] }) {
   return (
     <div className="legend">
       {items.map((it, i) => (

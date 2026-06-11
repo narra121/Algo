@@ -126,7 +126,7 @@ function NaiveViz({ step }: { step: Step<NaiveState> }) {
         items={[
           { tone: 'mint', label: 'left bound i' },
           { tone: 'amber', label: 'right bound j' },
-          { label: 'substring under test' },
+          { tone: 'amber', label: 'substring under test' },
         ]}
       />
     </>
@@ -273,11 +273,13 @@ function GapViz({ step }: { step: Step<GapState> }) {
           return null
         }}
       />
-      <div className="legend">
-        <span className="key"><span className="swatch mint" /> first occurrence (p)</span>
-        <span className="key"><span className="swatch amber" /> next occurrence (q) / hidden clash</span>
-        <span className="key"><span className="swatch sky" /> gap interior</span>
-      </div>
+      <Legend
+        items={[
+          { tone: 'mint', label: 'first occurrence (p)' },
+          { tone: 'amber', label: 'next occurrence (q) / hidden clash' },
+          { tone: 'sky', label: 'gap interior' },
+        ]}
+      />
       {positions.length > 0 && (
         <VizCaption>
           {positions.map(([ch, pos]) => `'${ch}': [${pos.join(', ')}]`).join(' · ')}
@@ -444,7 +446,7 @@ function setSteps(): Step<SetState>[] {
   steps.push({
     state: { i: -1, j: -1, seen: [], clash: null, best: trueBest, examined: totalExamined, done: true },
     description: `Answer: ${trueBest} ("cbad", indices 2–5). Correct — but ${perStart.join(' + ')} = ${totalExamined} character examinations, the set rebuilt ${n} times. The window approach needs ~18 pointer moves to cover the same ground.`,
-    codeLine: -1,
+    codeLine: 6,
   })
 
   return steps
