@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 import type { AlgorithmModule, Step } from '../../core/types'
+import { naiveDemo, rowRuleDemo, greedyDemo } from './demos'
 
 /* Canonical example: N-Queens on a 4×4 board — place 4 queens so none attack each other. */
 
@@ -190,6 +191,7 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
       space: 'O(n)',
       issues:
         'Verdicts only come on FINISHED boards, so a conflict between the first two queens — visible after two placements — is rediscovered separately on every one of the hundreds of complete boards that contain it. Even the smarter one-queen-per-row version still builds all 4⁴ = 256 finished boards before judging any of them. Backtracking checks after every single placement and discards the whole doomed subtree on the spot, touching just 26 squares total.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -213,6 +215,7 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
         'Correct, and a real win: 4⁴ = 256 boards instead of 1,820, just by refusing to generate what a constraint already forbids. But verdicts still only come on FINISHED boards. Put queens at (0, 0) and (1, 0) — a column clash you can see after two placements — and 16 of the 256 boards extend that doomed prefix; this loop dutifully builds and rejects all 16, rediscovering the same clash 16 times. At up to 6 pair-checks per board that is ~1,500 checks, versus the 26 squares the animation touches.',
       insight:
         'Encoding a constraint into HOW you generate beats filtering afterwards — so push that further: check each placement the moment you make it, not after the board is full.',
+      demo: rowRuleDemo,
     },
     {
       title: 'Check as you place — and greedily take the first safe square',
@@ -232,6 +235,7 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
         'Run it on this exact board. Row 0: col 0 is safe — take it. Row 1: cols 0 and 1 are attacked, col 2 is safe — take it. Row 2: col 0 shares a column, cols 1 and 3 are on diagonals from (1, 2), col 2 shares a column — every square is attacked. Greedy declares "no solution", yet [1, 3, 0, 2] solves the board. Each pick was locally safe; the combination was a trap it cannot escape.',
       insight:
         'Checking at every placement is exactly right — keep it. What is missing is the power to UNDO: a locally safe choice can doom every future row, so a dead end must send you back to revise the most recent pick, not give up.',
+      demo: greedyDemo,
     },
     {
       title: 'Backtracking — commit, explore, and undo on failure',
@@ -245,6 +249,7 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
         '        place queen at (row, col)       # choose',
         '        if solve(row + 1): return true  # explore',
         '        remove queen at (row, col)      # un-choose (backtrack)',
+        '    return false                        # no column works — fail upward',
       ],
       time: 'O(N!) worst case',
       space: 'O(N)',
@@ -253,6 +258,7 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
         'Nothing is wasted now. When row 2 dead-ends under queens at columns [0, 2], one undo discards all 16 complete boards built on that prefix — for the price of 4 checks. The whole row-0-at-col-0 branch (64 of the 256 boards) is buried after touching just 17 squares. In total the search touches 26 squares and undoes only 4 placements, and every square touched either advanced the solution or killed a subtree.',
       insight:
         'Each early conflict check is a verdict on an entire subtree of futures, not one board — which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
