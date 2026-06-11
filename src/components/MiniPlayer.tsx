@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AttemptDemo } from '../core/types'
 import { useStepPlayer } from '../core/useStepPlayer'
 import { PlayerControls } from './PlayerControls'
@@ -53,13 +53,11 @@ function MiniPlayerBody({
   const { Visualizer } = demo
 
   // Auto-play shortly after expand, once — mirrors the page-load autoplay of section ⑤.
-  const autoplayed = useRef(false)
   useEffect(() => {
-    if (autoplayed.current) return
-    autoplayed.current = true
     const t = setTimeout(() => player.play(), 800)
     return () => clearTimeout(t)
-  }, [player])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     onStepChange?.(player.step.codeLine)
