@@ -1,11 +1,51 @@
-import { useEffect, useMemo, useRef } from 'react'
-import type { AlgorithmModule } from '../core/types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { AlgorithmModule, Complexity, NaiveApproach } from '../core/types'
+import { MiniPlayer } from './MiniPlayer'
 import { useStepPlayer } from '../core/useStepPlayer'
 import { PlayerControls } from './PlayerControls'
 import { PseudocodePanel } from './PseudocodePanel'
 import { ProblemsList } from './ProblemsList'
 import { JourneyPanel } from './JourneyPanel'
 import { Narration } from './Narration'
+
+function NaiveCard({ naive, optimal }: { naive: NaiveApproach; optimal: Complexity }) {
+  const [hot, setHot] = useState(-1)
+  return (
+    <section className="panel naive-card">
+      <h2>② The brute force — and why it hurts</h2>
+      <p className="pstatement">{naive.description}</p>
+      <div className="naive-grid">
+        <div className="naive-code">
+          <div className="viz-caption">brute-force pseudocode</div>
+          <div className="code-lines">
+            {naive.pseudocode.map((line, i) => (
+              <div key={i} className={`code-line${i === hot ? ' hot' : ''}`}>
+                <span className="ln">{i + 1}</span>
+                <span>{line}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="naive-cost">
+          <div className="viz-caption">what it costs</div>
+          <div className="row">
+            <span className="chip bad">time {naive.time}</span>
+            <span className="chip bad">space {naive.space}</span>
+          </div>
+          <p className="why">{naive.issues}</p>
+          <div className="vs-line">
+            <span className="vs-label">this pattern instead</span>
+            <span className="chip time">time {optimal.time}</span>
+            <span className="chip space">space {optimal.space}</span>
+          </div>
+        </div>
+      </div>
+      {naive.demo && (
+        <MiniPlayer demo={naive.demo} label="watch the brute force run" onStepChange={setHot} />
+      )}
+    </section>
+  )
+}
 
 export function AlgorithmPage({ algo, onBack }: { algo: AlgorithmModule; onBack: () => void }) {
   const steps = useMemo(() => algo.generateSteps(), [algo])
@@ -55,36 +95,7 @@ export function AlgorithmPage({ algo, onBack }: { algo: AlgorithmModule; onBack:
         </div>
       </section>
 
-      <section className="panel naive-card">
-        <h2>② The brute force — and why it hurts</h2>
-        <p className="pstatement">{algo.problem.naive.description}</p>
-        <div className="naive-grid">
-          <div className="naive-code">
-            <div className="viz-caption">brute-force pseudocode</div>
-            <div className="code-lines">
-              {algo.problem.naive.pseudocode.map((line, i) => (
-                <div key={i} className="code-line">
-                  <span className="ln">{i + 1}</span>
-                  <span>{line}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="naive-cost">
-            <div className="viz-caption">what it costs</div>
-            <div className="row">
-              <span className="chip bad">time {algo.problem.naive.time}</span>
-              <span className="chip bad">space {algo.problem.naive.space}</span>
-            </div>
-            <p className="why">{algo.problem.naive.issues}</p>
-            <div className="vs-line">
-              <span className="vs-label">this pattern instead</span>
-              <span className="chip time">time {algo.complexity.time}</span>
-              <span className="chip space">space {algo.complexity.space}</span>
-            </div>
-          </div>
-        </div>
-      </section>
+      <NaiveCard naive={algo.problem.naive} optimal={algo.complexity} />
 
       <JourneyPanel naive={algo.problem.naive} journey={algo.journey} />
 
