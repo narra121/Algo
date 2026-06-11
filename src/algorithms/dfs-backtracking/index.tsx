@@ -212,7 +212,7 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
       space: 'O(n)',
       verdict: 'partial',
       breaks:
-        'Correct, and a real win: 4⁴ = 256 boards instead of 1,820, just by refusing to generate what a constraint already forbids. But verdicts still only come on FINISHED boards. Put queens at (0, 0) and (1, 0) — a column clash you can see after two placements — and 16 of the 256 boards extend that doomed prefix; this loop dutifully builds and rejects all 16, rediscovering the same clash 16 times. At up to 6 pair-checks per board that is ~1,500 checks, versus the 26 squares the animation touches.',
+        'Correct, and a real win: 4⁴ = 256 boards instead of 1,820, just by refusing to generate what a constraint already forbids. But verdicts still only come on FINISHED boards. Put queens at (0, 0) and (1, 0) — a column clash you can see after two placements — and 16 of the 256 boards extend that doomed prefix; this loop dutifully builds and rejects all 16, rediscovering the same clash 16 times. At up to 6 pair-checks per board, the full 256-board sweep costs ~1,500 checks, versus the 26 squares the animation touches.',
       insight:
         'Encoding a constraint into HOW you generate beats filtering afterwards — so push that further: check each placement the moment you make it, not after the board is full.',
       demo: rowRuleDemo,

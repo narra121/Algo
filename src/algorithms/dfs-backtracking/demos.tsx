@@ -485,7 +485,7 @@ function greedySteps(): Step<GreedyState>[] {
       // Use deadEnd flag so the visualizer can highlight every cell in the stuck row
       steps.push({
         state: snap({ deadEnd: true, caption: `row ${row} · every column attacked — dead end` }),
-        description: `Row ${row}: col 0 shares the column with (0,0); col 1 is on a diagonal from (1,2); col 2 shares the column with (1,2); col 3 is on a diagonal from (1,2). Every square in row ${row} is attacked. Greedy returns "no solution" — yet [1, 3, 0, 2] solves the board. Each pick was locally safe; together they paint the algorithm into a corner it cannot escape.`,
+        description: `Row ${row}: col 0 shares the column with (0,0); col 1 is on a diagonal from (1,2); col 2 is on a diagonal from (0,0); col 3 is on a diagonal from (1,2). Every square in row ${row} is attacked. Greedy returns "no solution" — yet [1, 3, 0, 2] solves the board. Each pick was locally safe; together they paint the algorithm into a corner it cannot escape.`,
         codeLine: 2,
       })
       break
