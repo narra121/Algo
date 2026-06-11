@@ -1,9 +1,8 @@
 import type { AlgorithmModule, Step } from '../../core/types'
+import { naiveDemo, hashDemo, jumpDemo } from './demos'
+import { ARR, TARGET } from './data'
 
 /* Canonical example: find target 37 in a sorted array by repeatedly halving the search space. */
-
-const ARR = [3, 8, 12, 19, 23, 28, 37, 41, 56, 64, 72, 89]
-const TARGET = 37
 
 interface BSState {
   arr: number[]
@@ -190,6 +189,7 @@ export const binarySearch: AlgorithmModule<BSState> = {
       space: 'O(1)',
       issues:
         'Each look eliminates exactly ONE candidate: after checking 3, you still know nothing about the other 11 elements. The scan throws away the one thing sortedness offers — that a single comparison against the middle could rule out half the array at once. On a million-element array that is up to 1,000,000 looks where 20 would do, and the gap doubles every time the data doubles.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -213,6 +213,7 @@ export const binarySearch: AlgorithmModule<BSState> = {
         'It answers correctly — but look at the bill. Building the map touches all 12 elements (12 insertions plus O(n) memory) before the single instant lookup, so for one question the total work is WORSE than the scan\'s 7 looks. And notice what it never used: the array is ALREADY SORTED, and this code runs identically on a shuffled copy. We are paying memory for speed the sortedness should hand us for free.',
       insight:
         'A side index is wasted effort when the data is already organized — sorted order IS an index. Use the order itself to skip elements, instead of inspecting every one.',
+      demo: hashDemo,
     },
     {
       title: 'Jump search — leap in √n strides, scan the last block',
@@ -232,6 +233,7 @@ export const binarySearch: AlgorithmModule<BSState> = {
         'Genuinely faster: probe a[2] = 12, a[5] = 28, a[8] = 56 — overshot! — then scan the block and hit a[6] = 37. Four looks instead of seven. But the stride is blind to what it learns: when a[5] = 28 came back too small, that verdict condemned EVERYTHING left of index 5 — yet the fixed stride only credits it with clearing 3 cells. At a million elements, jump search still needs ~2,000 looks where 20 would do.',
       insight:
         'Each probe\'s verdict speaks for everything on one side of it — so stop eliminating fixed-size blocks and eliminate a constant FRACTION of whatever remains. The probe that splits the survivors evenly is the middle one.',
+      demo: jumpDemo,
     },
     {
       title: 'Binary search — probe the middle, halve the world',
@@ -244,7 +246,7 @@ export const binarySearch: AlgorithmModule<BSState> = {
         '    if a[mid] = target: return mid',
         '    if a[mid] < target: lo ← mid + 1',
         '    else:               hi ← mid − 1',
-        'return −1',
+        'return −1   ▸ exhausted: target absent',
       ],
       time: 'O(log n)',
       space: 'O(1)',
@@ -253,6 +255,7 @@ export const binarySearch: AlgorithmModule<BSState> = {
         'Nothing is wasted now: one three-way comparison can never rule out more than half the candidates, and probing the middle rules out EXACTLY half, every time. Watch it on this array: a[5] = 28 < 37 kills six values at once, a[8] = 56 > 37 kills four more, and the third probe lands on 37 at index 6 — the space shrinks 12 → 6 → 2 → found, in 3 probes with zero extra memory. Doubling the array would cost just one more.',
       insight:
         'The middle element answers for its entire half — which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
