@@ -57,6 +57,34 @@ export interface NaiveApproach {
   issues: string
 }
 
+/**
+ * One stop on the road from brute force to the optimal solution — a plausible
+ * idea a real student would try next, and where it breaks.
+ */
+export interface JourneyAttempt {
+  /** Short name of the idea, e.g. "Sort, then binary-search each complement". */
+  title: string
+  /** The natural thought process that gets a student to this idea. 1–2 sentences. */
+  spark: string
+  /** 3–7 lines of pseudocode. */
+  pseudocode: string[]
+  time: string
+  space: string
+  /** fail = incorrect; partial = correct but suboptimal; optimal = the answer. */
+  verdict: 'fail' | 'partial' | 'optimal'
+  /**
+   * Where it goes wrong, demonstrated with THIS page's concrete input values and
+   * real operation counts. 'fail' needs a counterexample; 'partial' a cost
+   * comparison; 'optimal' explains why nothing is wasted. Hidden until revealed.
+   */
+  breaks: string
+  /**
+   * The one salvaged lesson the NEXT attempt is built on — or, for the optimal
+   * attempt, the bridge sentence into the aha banner.
+   */
+  insight: string
+}
+
 export interface AlgorithmModule<S = any> {
   /** URL-safe id, matches the folder name, e.g. "two-pointers". */
   id: string
@@ -74,6 +102,11 @@ export interface AlgorithmModule<S = any> {
    * why this works" moment. Displayed large before the animation.
    */
   aha: string
+  /**
+   * The road from brute force to the optimal solution: 2–4 attempts a student
+   * would genuinely try, each flawed in an instructive way, the last one optimal.
+   */
+  journey: JourneyAttempt[]
   /** Intuition paragraphs. First paragraph should be a real-world analogy. */
   intuition: string[]
   pseudocode: string[]

@@ -249,6 +249,65 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
   },
   aha:
     'A course with in-degree 0 has every prerequisite already behind it, so scheduling it next can NEVER break the order — and once placed it can be deleted forever, which may unblock its neighbors. Repeating that one always-safe move sorts all 7 courses in V + E = 15 operations instead of auditing 5,040 permutations.',
+  journey: [
+    {
+      title: 'Sort courses by how many prerequisites they list',
+      spark:
+        'Intro to CS has zero prerequisites and Capstone has the most pressure on it — so just rank every course by its prerequisite count, fewest first, and take them in that order. One sort, done.',
+      pseudocode: [
+        'count[v] ← number of arrows into v',
+        'sort the n courses ascending by count[v]',
+        'return the sorted list',
+      ],
+      time: 'O(V log V + E)',
+      space: 'O(V)',
+      verdict: 'fail',
+      breaks:
+        "The counts here are A:0, B:0, C:1, F:1, D:2, E:2, G:2 — so D, E and G are a three-way tie, and the sort is free to emit A, B, C, F, G, D, E. That puts G (Capstone) before E (Algorithms) AND E before D (Discrete Math), breaking the arrows E → G and D → E. A static count can't see depth: G sits at the end of the chain A → C → E → G, yet its number looks identical to D's.",
+      insight:
+        "Readiness isn't about how many prerequisites a course HAS — it's about which ones are already DONE. The order has to be built incrementally, checking completion as you go.",
+    },
+    {
+      title: 'Simulate semesters — re-scan for any course whose prerequisites are all done',
+      spark:
+        'So build the order live: each "semester", scan the whole catalog for courses whose prerequisites are all already placed, take them, and repeat until all 7 are scheduled.',
+      pseudocode: [
+        'order ← []',
+        'while some course is unplaced:',
+        '    for each unplaced course v:',
+        '        if every prerequisite of v is in order: append v',
+        '    if nothing was appended: cycle, stop',
+      ],
+      time: 'O(V · (V + E))',
+      space: 'O(V)',
+      verdict: 'partial',
+      breaks:
+        "Correct — it finds A, B → C, D → E, F → G in 4 passes. But count the work: pass 1 checks 7 courses against all 8 arrows (56 looks), pass 2 checks 5 (40), pass 3 checks 3 (24), pass 4 checks 1 (8) — 128 arrow-checks to place 7 courses, versus 15 operations for Kahn's. Worse, the re-scans are pure polling: G gets re-examined every single pass even though nothing about it changed until E and F finished.",
+      insight:
+        'The ONLY event that can unlock a course is one of its prerequisites finishing. So stop asking every course every pass — let each finished course push the news to its dependents directly.',
+    },
+    {
+      title: "Kahn's algorithm — count down in-degrees, queue whatever hits 0",
+      spark:
+        "Give every course a live counter of pending prerequisites. When a course is placed, decrement the counter of each dependent — and any counter that hits 0 announces itself by joining the queue. No scanning, ever.",
+      pseudocode: [
+        'compute in-degree of every node',
+        'queue ← all nodes with in-degree 0',
+        'while queue not empty:',
+        '    u ← dequeue(queue); append u to order',
+        '    for each edge u → v:',
+        '        in-degree[v] ← in-degree[v] − 1; if 0: enqueue v',
+        'if |order| = n: return order — else: cycle',
+      ],
+      time: 'O(V + E)',
+      space: 'O(V)',
+      verdict: 'optimal',
+      breaks:
+        "Nothing is wasted now: each of the 7 courses enters the queue exactly once (the single moment its counter hits 0), and each of the 8 arrows is deleted exactly once, when its source is placed. That's 7 dequeues + 8 decrements = 15 operations total — no course is ever re-examined, unlike the 128 polling checks, and no ordering is ever guessed, unlike the 5,040 permutations.",
+      insight:
+        'A counter hitting 0 is a PROOF that every prerequisite is already behind us — which is exactly the aha below.',
+    },
+  ],
   intuition: [
     "Picture planning a college degree. The capstone needs Algorithms, Algorithms needs Data Structures and Discrete Math, and those need the intro courses. You can't enroll in everything at once — but each semester you CAN take any course whose prerequisites are all done. Take those, cross them off, and suddenly new courses become available. Repeat until the whole catalog is scheduled.",
     "The key insight is the in-degree counter: a node with in-degree 0 has no unmet dependency, so placing it next can never break an ordering — every arrow into it is already behind us. And once it's placed, it can be deleted from the graph, decrementing its neighbors' counters. The invariant is that the queue holds EXACTLY the nodes whose entire ancestry is already in the output. If the queue ever empties before all n nodes are placed, every remaining node is waiting on another remaining node — a cycle — and no valid order exists at all.",

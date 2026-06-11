@@ -264,6 +264,68 @@ export const heap: AlgorithmModule<HeapState> = {
   },
   aha:
     'You never need the top 3 in order — you only need their WEAKEST member, and a min-heap pins exactly that value to its root: any arrival that cannot beat the root is provably outside the top 3 and can be thrown away forever after a single comparison, so a stream of any length needs just 3 slots of memory and at most log₂ 3 swaps per arrival instead of storing and sorting everything.',
+  journey: [
+    {
+      title: 'Stop re-sorting — keep the history sorted and insert into place',
+      spark:
+        'The naive plan throws away a perfectly sorted list after every arrival, then rebuilds it from scratch. So never re-sort: the list is already in order — just slide each newcomer into its slot.',
+      pseudocode: [
+        'seen ← empty list, kept descending',
+        'for each x in stream:',
+        '    binary-search for x’s slot',
+        '    shift the tail right, drop x in',
+        '    answer ← seen[k − 1]',
+      ],
+      time: 'O(n) per arrival',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'Correct, and cheaper: inserting 3, 1, 5, 12, 2, 11, 9, 7 one by one costs 18 shifted values plus a handful of binary-search probes, versus the 36 values the re-sorts shuffled. But look at the final list — 12, 11, 9, 7, 5, 3, 2, 1. We are carefully filing 7, 5, 3, 2, 1: five values sitting BELOW slot 3. A stream only ever adds, so once a value falls out of the top 3 it can never climb back — those five are dead weight we keep paying to keep in order, and the list still grows forever.',
+      insight:
+        'Only the top k = 3 values can ever be the answer; the moment something drops below them it is irrelevant for good. So store exactly 3, and decide at the door: reject the newcomer, or evict the weakest.',
+    },
+    {
+      title: 'Keep only the top 3, in a sorted row',
+      spark:
+        'Then cap the memory at 3. Hold the three largest in order, compare each arrival against the weakest of them, and if it wins, drop that weakest and slide the newcomer into its place.',
+      pseudocode: [
+        'top ← sorted row of k = 3, descending',
+        'for each x in stream:',
+        '    if x ≤ top[k − 1]: reject x',
+        '    else: drop top[k − 1],',
+        '          slide x into its slot',
+        '    answer ← top[k − 1]',
+      ],
+      time: 'O(n k)',
+      space: 'O(k)',
+      verdict: 'partial',
+      breaks:
+        'This is nearly the answer: memory is pinned at 3 slots, and 2 and 7 are turned away with one comparison each against the weakest. But watch what the sorted row spends its effort on — when 11 arrives we slide it between 12 and 5 to keep [12, 11, 5] perfectly ordered, yet the order of 12 versus 11 is never read: every rejection, every eviction, and every answer touches ONLY the weakest slot. With k = 3 the slides are cheap; with k = 1000 each accepted arrival shifts up to 999 values to maintain an ordering nobody ever asks about.',
+      insight:
+        'You never use the full order of the kept k — every operation reads just their MINIMUM. So keep the order deliberately lazy: any structure that pins the minimum somewhere findable and repairs itself in fewer than k steps wins.',
+    },
+    {
+      title: 'A min-heap of size 3 — total order traded for one pinned minimum',
+      spark:
+        'A min-heap is exactly that lazy structure: the only rule is parent ≤ children — nothing about siblings — so the minimum of the kept 3 always sits at the root, and any repair walks just one short root-to-leaf path.',
+      pseudocode: [
+        'min-heap ← empty, k ← 3',
+        'for each x in stream:',
+        '    if heap.size < k:',
+        '        append x, sift up',
+        '    else if x ≤ heap.root: reject x',
+        '    else: overwrite root, sift down',
+        'kth-largest-so-far = heap.root',
+      ],
+      time: 'O(n log k)',
+      space: 'O(k)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now: memory is exactly 3 slots however long the stream runs, 2 and 7 are dismissed with a single comparison against the root, and across all 8 arrivals no repair ever walks more than log₂ 3 ≈ 2 levels — the heap never spends a comparison establishing order it will not read, because the lazy invariant guarantees only the one fact every operation needs: the weakest kept value is at the root.',
+      insight:
+        'The root of a size-k min-heap IS the kth largest — the weakest member of the elite, pinned where one glance reads it and one comparison defends it. That is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Picture a tiny VIP lounge with exactly 3 seats and a bouncer at the door. The bouncer does not memorize everyone inside — he only remembers the LEAST impressive guest currently seated. When someone new shows up, one glance settles it: less impressive than that weakest guest? Turned away. More impressive? The weakest guest is escorted out and the newcomer takes a seat, after which the bouncer quickly re-checks who the new weakest guest is.',
     "The key insight is the heap invariant: every parent is ≤ its children (in a min-heap), so the global minimum is always at the root — no searching required. The invariant is deliberately LAZY: it says nothing about the order of siblings, which is exactly why it is so cheap to maintain. Insert at the bottom and sift up, or replace the root and sift down — either repair walks one root-to-leaf path, just O(log n) swaps, instead of re-sorting everything. For top-k specifically, a min-heap of size k makes the root the admission threshold: beat the root or you provably cannot be in the top k.",

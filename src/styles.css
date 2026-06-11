@@ -529,6 +529,223 @@ button {
   color: var(--mint);
 }
 
+/* the road to the insight — guided reveal stepper */
+.journey-card {
+  margin-bottom: 18px;
+  border-left: 3px solid var(--sky);
+}
+
+.jintro {
+  color: var(--muted);
+  font-size: 14.5px;
+  margin: 0 0 20px;
+  max-width: 760px;
+}
+
+.jsteps {
+  display: flex;
+  flex-direction: column;
+}
+
+.jstep {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.jrail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* connecting line below each dot */
+.jstep:not(:last-child) .jrail::after {
+  content: '';
+  flex: 1;
+  width: 2px;
+  margin-top: 4px;
+  background: var(--line-strong);
+  min-height: 18px;
+}
+
+.jdot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  border: 1px solid var(--line-strong);
+  color: var(--faint);
+  background: rgba(10, 15, 34, 0.6);
+  flex-shrink: 0;
+}
+
+.jdot.fail {
+  color: var(--rose);
+  border-color: rgba(255, 107, 129, 0.4);
+  background: var(--rose-dim);
+}
+
+.jdot.partial {
+  color: var(--amber);
+  border-color: rgba(255, 180, 84, 0.4);
+  background: var(--amber-dim);
+}
+
+.jdot.optimal {
+  color: var(--mint);
+  border-color: rgba(94, 242, 184, 0.4);
+  background: var(--mint-dim);
+}
+
+.jdot.live {
+  color: var(--sky);
+  border-color: rgba(110, 168, 255, 0.5);
+  background: var(--sky-dim);
+  box-shadow: 0 0 14px rgba(110, 168, 255, 0.25);
+}
+
+.jbody {
+  padding-bottom: 22px;
+  min-width: 0;
+  animation: rise 0.45s both;
+}
+
+.jstep.locked .jbody {
+  padding-bottom: 14px;
+}
+
+.jtitle {
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  font-weight: 650;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.jtitle.dim {
+  color: var(--faint);
+}
+
+.jnum {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.jverdict {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 2px 9px;
+  border-radius: 99px;
+}
+
+.jverdict.fail {
+  color: var(--rose);
+  background: var(--rose-dim);
+}
+
+.jverdict.partial {
+  color: var(--amber);
+  background: var(--amber-dim);
+}
+
+.jverdict.optimal {
+  color: var(--mint);
+  background: var(--mint-dim);
+}
+
+.jspark {
+  color: var(--muted);
+  font-size: 14.5px;
+  margin: 0 0 12px;
+  max-width: 720px;
+}
+
+.jcode {
+  background: rgba(10, 15, 34, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 12px 8px;
+  margin-bottom: 12px;
+  max-width: 640px;
+}
+
+.jchips {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.jreveal {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--sky);
+  background: var(--sky-dim);
+  border: 1px solid rgba(110, 168, 255, 0.4);
+  border-radius: 99px;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.jreveal:hover {
+  background: rgba(110, 168, 255, 0.28);
+  box-shadow: 0 0 18px rgba(110, 168, 255, 0.2);
+}
+
+.jbreaks {
+  font-size: 14.5px;
+  color: var(--muted);
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--rose-dim);
+  background: rgba(255, 107, 129, 0.06);
+  max-width: 720px;
+}
+
+.jbreaks.partial {
+  border-color: var(--amber-dim);
+  background: rgba(255, 180, 84, 0.06);
+}
+
+.jbreaks.optimal {
+  border-color: var(--mint-dim);
+  background: rgba(94, 242, 184, 0.06);
+}
+
+.jbreaks strong {
+  color: var(--ink);
+}
+
+.jinsight {
+  font-size: 14.5px;
+  color: var(--ink);
+  margin: 0;
+  max-width: 720px;
+}
+
+.joutro {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mint);
+  margin: 6px 0 0 48px;
+  animation: rise 0.45s both;
+}
+
 .aha-banner {
   position: relative;
   margin-bottom: 18px;

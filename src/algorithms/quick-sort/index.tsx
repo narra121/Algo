@@ -194,6 +194,68 @@ export const quickSort: AlgorithmModule<QSState> = {
   },
   aha:
     'One sweep does not "roughly place" the pivot — it provably locks it into its FINAL sorted slot, because everything smaller now sits to its left and everything bigger to its right, so no element ever needs to cross that boundary again. That one irreversible fact splits the problem in two for good each pass: about log n rounds of n cheap comparisons instead of n² of endless reshuffling.',
+  journey: [
+    {
+      title: 'Sort the halves, then merge — merge sort',
+      spark:
+        'Selection sort dies because every pass rescans nearly everything and keeps only ONE fact. The classic fix: divide and conquer — sort each half separately (a half-size problem is far more than half as easy), then merge the two sorted halves back together.',
+      pseudocode: [
+        'mergeSort(a):',
+        '    if |a| ≤ 1: return a',
+        '    L ← mergeSort(left half)',
+        '    R ← mergeSort(right half)',
+        '    return merge(L, R)   // needs a scratch array',
+      ],
+      time: 'O(n log n) — always',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'It genuinely works — on these 8 numbers merge sort spends just 17 comparisons, even fewer than quick sort\'s 21. The catch is the merge: interleaving the sorted halves [10, 14, 29, 37] and [8, 13, 25, 31] needs somewhere to write the combined order, and that somewhere is a second 8-slot array. The task said IN PLACE — at a million items you are buying a million-element scratch buffer just to recombine work you already did.',
+      insight:
+        'Divide and conquer is the right shape — but merge sort does all its real work AFTER the recursion, in a combine step that forces the scratch array. Flip it: do the work BEFORE splitting, so the halves never need recombining.',
+    },
+    {
+      title: 'Partition by value into two new lists',
+      spark:
+        'So compare first, split second: pick a pivot, send everything smaller into one list and everything bigger into another. Then sorted-smalls + pivot + sorted-bigs IS the answer — gluing lists end to end is free, so there is nothing left to merge.',
+      pseudocode: [
+        'partitionSort(a):',
+        '    if |a| ≤ 1: return a',
+        '    pivot ← last element of a',
+        '    smalls ← [x : x < pivot]   // new list',
+        '    bigs   ← [x : x > pivot]   // new list',
+        '    return partitionSort(smalls) + pivot + partitionSort(bigs)',
+      ],
+      time: 'O(n log n) average',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'Correct, and the merge really is gone: pivot 31 splits the rest into smalls [29, 10, 14, 13, 25, 8] and bigs [37], and the final concatenation costs nothing. But look at the memory: all 7 elements just got COPIED into brand-new lists, and every recursion level copies its whole range again — the same O(n) scratch bill merge sort paid, just moved from the merge to the split. At a million items the very first partition already allocates a fresh million elements.',
+      insight:
+        'Watch what each comparison actually decides: "left of the pivot or right of it" — a two-zone verdict. Two zones inside ONE array need no new lists, just a boundary index and a swap whenever an element is on the wrong side.',
+    },
+    {
+      title: 'Partition in place — quick sort',
+      spark:
+        'Keep the boundary inside the array itself: everything left of index i is the small zone. Sweep the range once — each time the scanner finds an element smaller than the pivot, swap it across the boundary and grow the zone. One last swap drops the pivot at the boundary.',
+      pseudocode: [
+        'quickSort(a, lo, hi):',
+        '    if lo ≥ hi: return',
+        '    pivot ← a[hi];  i ← lo',
+        '    for j ← lo to hi − 1:',
+        '        if a[j] < pivot: swap a[i], a[j];  i ← i + 1',
+        '    swap a[i], a[hi]        // pivot lands at i, forever',
+        '    quickSort(a, lo, i − 1);  quickSort(a, i + 1, hi)',
+      ],
+      time: 'O(n log n) average, O(n²) worst',
+      space: 'O(log n) average (recursion stack)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now: each of the first pass\'s 7 comparisons either grows the small zone with one swap or leaves the element exactly where it stands — no copies, no new lists, no merge. That sweep drops pivot 31 at index 6 and it never moves again; 5 such passes sort all 8 numbers in 21 comparisons, with only the O(log n) recursion stack as overhead.',
+      insight:
+        'And the slot the pivot lands in is not a rough guess — the sweep provably locks it into its final sorted position, which is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Picture a teacher lining students up by height. She grabs one student — the pivot — and shouts: "shorter than them, stand to the left; taller, to the right." She has not sorted anyone yet, but that one student is now standing EXACTLY where they will be in the final line. She then repeats the trick inside the left group and inside the right group, and the line assembles itself.',
     'The key insight is that one partition pass buys you a permanent fact: the pivot is in its final position, and no element ever needs to cross it again. The Lomuto scan maintains a tidy invariant — everything in [lo, i) is smaller than the pivot, everything in [i, j) is at least as big — so when the scan finishes, one last swap drops the pivot at i. Unlike merge sort, all the work happens BEFORE the recursive calls; there is nothing to combine afterwards.',

@@ -198,6 +198,66 @@ export const mergeSort: AlgorithmModule<MSState> = {
   },
   aha:
     'Sorting chaos is hard, but merging two ALREADY-SORTED lists is almost free: the front of a sorted list is its minimum, so whichever front is smaller beats everything still waiting in BOTH lists and can be locked into its final position forever. Split until every piece is a single element — sorted by definition — and the whole job becomes log₂ n levels of these cheap zips: 8 × 3 = 24 placements here instead of n²/2 comparisons.',
+  journey: [
+    {
+      title: 'Insertion sort — grow a sorted prefix, slide each newcomer into place',
+      spark:
+        'Bubble sort\'s sin is re-comparing the same neighbors pass after pass. So compare with purpose: keep the left part of the array sorted, and slide each new value leftward until it fits — every comparison now places something.',
+      pseudocode: [
+        'for i ← 1 .. n − 1:',
+        '    x ← a[i]; j ← i − 1',
+        '    while j ≥ 0 and a[j] > x:',
+        '        a[j+1] ← a[j]   // shift right one slot',
+        '        j ← j − 1',
+        '    a[j+1] ← x',
+      ],
+      time: 'O(n²)',
+      space: 'O(1)',
+      verdict: 'partial',
+      breaks:
+        'Correct, and genuinely leaner than bubble sort: on [38, 27, 43, 3, 9, 82, 10, 5] it needs exactly 17 one-slot shifts — one per inversion — instead of repeated full sweeps. But watch 5, the last value: it crawls past 82, 43, 38, 27, 10 and 9, six separate shifts to travel six positions. Every value still moves ONE slot per operation, so a reversed million-element array still costs ~500 billion shifts. The constant got better; the n² did not.',
+      insight:
+        'The real enemy is one-step-at-a-time movement. To beat n², a value like 5 must be able to leap from one end of the array toward home in a single operation — which means restructuring the problem, not polishing the loop.',
+    },
+    {
+      title: 'Divide and conquer — sort each half separately, then stick them together',
+      spark:
+        'Quadratic cost means half the size is a quarter of the work: sorting two halves of 4 costs about 2 × 4² = 32 units instead of 8² = 64. So split [38, 27, 43, 3 | 9, 82, 10, 5], sort each half on its own, and concatenate.',
+      pseudocode: [
+        'mid ← n / 2',
+        'left  ← sort(a[0 .. mid−1])    // half the size',
+        'right ← sort(a[mid .. n−1])',
+        'answer ← left followed by right',
+      ],
+      time: 'O(n²)',
+      space: 'O(n)',
+      verdict: 'fail',
+      breaks:
+        'Sort the halves: left becomes [3, 27, 38, 43], right becomes [5, 9, 10, 82]. Concatenate and you get [3, 27, 38, 43, 5, 9, 10, 82] — 43 sitting in front of 5. The split never asked where each value belongs GLOBALLY: 5, 9 and 10 live in the right half but belong among the left half\'s values. Gluing end-to-end throws away the answer.',
+      insight:
+        'But look at what survived the wreck: both halves came out perfectly sorted — only the glue failed. And two SORTED lists can be zipped in linear time: each front is its list\'s minimum, so compare the two fronts, take the smaller, repeat — 8 placements here, no rescanning, ever.',
+    },
+    {
+      title: 'Merge sort — split to single elements, zip sorted halves all the way up',
+      spark:
+        'If merging two sorted halves is linear, why stop at one split? Keep halving until every piece is a single element — sorted by definition, zero work — then let cheap merges do ALL the sorting on the way back up.',
+      pseudocode: [
+        'mergeSort(a, lo, hi):',
+        '    if lo ≥ hi: return          // one element ⇒ sorted',
+        '    mid ← (lo + hi) / 2',
+        '    mergeSort(a, lo, mid)',
+        '    mergeSort(a, mid + 1, hi)',
+        '    merge the two sorted halves: take smaller front, repeat',
+      ],
+      time: 'O(n log n)',
+      space: 'O(n)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now: every comparison happens between two fronts of sorted lists, and the winner is locked into its final position forever — placed values never move again. The 5 that needed 6 insertion shifts gets carried home inside its merges instead of crawling slot by slot. Halving 8 elements bottoms out in log₂ 8 = 3 levels, each touching all 8 elements once: 24 placements total, versus up to 28 pair-comparisons per bubble pass — and the gap explodes to 25,000× at a million elements.',
+      insight:
+        'All the cleverness lives in one fact — merging two already-sorted lists is almost free — which is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Imagine two librarians, each holding an alphabetized stack of index cards, combining their stacks into one. Each just looks at the top card of both stacks, places the alphabetically-earlier one face-down on the output pile, and repeats. Neither ever digs into the middle of a stack — the top card is always the next correct one. Merging sorted stacks is mindless; building a sorted stack from chaos is the hard part. Merge sort makes sure the librarians only ever see sorted stacks.',
     'The key insight is that one element is already sorted, and two sorted lists merge in linear time because the front of a sorted list is its minimum — whichever front is smaller beats everything remaining in BOTH lists, so it can be placed permanently without looking at anything else. Splitting in half repeatedly creates log n levels of these cheap merges, and every level processes the same n elements exactly once.',

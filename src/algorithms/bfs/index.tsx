@@ -231,6 +231,88 @@ export const bfs: AlgorithmModule<BFSState> = {
   },
   aha:
     'Because BFS finishes EVERY cell at distance k before touching any cell at distance k+1, the first time it reaches a cell is provably the shortest way there — so each cell can be sealed forever on first touch. One visit per cell (33 here) buys the minimality guarantee that brute force needs all 165 backtracking steps to earn.',
+  journey: [
+    {
+      title: 'Quit at the first route DFS finds',
+      spark:
+        'The brute force only hurts because it refuses to stop — it walks all 6 routes before swearing 12 is minimal. A path is a path: return the first one DFS finds and skip the other five.',
+      pseudocode: [
+        'explore(cell, moves, visited):',
+        '    if cell = T: return moves',
+        '    for each open neighbor not in visited:',
+        '        result ← explore(neighbor, moves + 1, visited ∪ {cell})',
+        '        if result found: return result',
+        'return explore(S, 0, ∅)',
+      ],
+      time: 'O(V + E)',
+      space: 'O(V)',
+      verdict: 'fail',
+      breaks:
+        'Which route comes back first is an accident of neighbor ordering, not of length. On this exact maze, a DFS that tries down before right returns a 20-move route; prefer down-then-left and it proudly returns 26 — more than double the true 12. A right-first order happens to luck into 12 here, which is the most dangerous outcome of all: it looks correct until the next maze.',
+      insight:
+        'DFS commits to one route all the way to the end before trying another, so "first found" carries no distance information. To make first-found mean something, you must control the ORDER in which routes get explored.',
+    },
+    {
+      title: 'Steer greedily toward the target',
+      spark:
+        'If ordering is the problem, bias it: from each cell, always step to the unvisited neighbor that closes the row+col gap to T. Head down-and-right and the first arrival should be a short one.',
+      pseudocode: [
+        'cell ← S, moves ← 0',
+        'while cell ≠ T:',
+        '    cell ← unvisited open neighbor closest to T',
+        '              (by row + column distance)',
+        '    if no neighbor closes the gap: stuck',
+        '    moves ← moves + 1',
+      ],
+      time: 'O(V) — when it survives',
+      space: 'O(V)',
+      verdict: 'fail',
+      breaks:
+        'Walls do not care about geometry. From S, down and right both leave the gap at 11 — a coin flip. Pick down and the walk slides along the left edge to (5,1), where after 6 moves it is wedged: (5,2) is a wall, and the only open neighbor (4,1) moves AWAY from T, which the rule forbids. Pick right and it threads the 12-move route — pure luck; the rule cannot tell a corridor from a dead end.',
+      insight:
+        'Local direction cannot be trusted in a maze. The only quantity that never lies is the move count itself — so organize the search by distance walked, not by compass heading.',
+    },
+    {
+      title: 'Iterative deepening — cap the depth, raise the cap',
+      spark:
+        'If distance should drive the search, enforce it: run DFS with a hard cap of 1 move, then 2, then 3… The first cap that reaches T is, by construction, the exact shortest distance.',
+      pseudocode: [
+        'for cap ← 1, 2, 3, …:',
+        '    if depthLimitedDFS(S, cap) reaches T:',
+        '        return cap',
+        'depthLimitedDFS: ordinary DFS that',
+        '    refuses to descend past depth = cap',
+      ],
+      time: 'O(branchᶜᵃᵖ) per cap, re-run 12 times',
+      space: 'O(cap)',
+      verdict: 'partial',
+      breaks:
+        'Finally correct: cap 12 is the first to touch T, and that PROVES 12 is minimal without enumerating all 6 routes. But every new cap restarts from scratch, so caps 1 through 12 burn 250 cell visits on this maze — even more than the 165 the exhaustive search took — because the cells near S get re-walked twelve times over.',
+      insight:
+        'The cap idea is exactly right — finish distance 1 completely, then distance 2, then 3. The waste is the restart. Keep each finished distance layer alive, and grow the next layer directly from it.',
+    },
+    {
+      title: 'BFS — expand the whole frontier one wave at a time',
+      spark:
+        'Do not restart — remember. Hold every cell at distance k in a queue, and build distance k+1 by expanding each of them exactly once. Each cell is discovered by the earliest wave that can possibly reach it.',
+      pseudocode: [
+        'dist[S] ← 0; queue ← [S]',
+        'while queue is not empty:',
+        '    cell ← dequeue(queue)',
+        '    if cell = T: break — first arrival is shortest',
+        '    for each neighbor (up, down, left, right):',
+        '        if in bounds, not a wall, not yet visited:',
+        '            dist[nbr] ← dist[cell] + 1; enqueue(nbr)',
+      ],
+      time: 'O(V + E)',
+      space: 'O(V)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is re-walked and nothing is guessed: each of the 33 reachable cells is stamped with a distance the moment it is first touched and never enters the queue again. The queue releases cells in non-decreasing distance order, so when wave 12 touches T, everything at distance 11 is already finished — a cheaper route would have arrived in an earlier wave. 33 visits buy the proof that cost backtracking 165 steps.',
+      insight:
+        'First touch IS the shortest distance, sealed forever — which is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Drop a pebble into a still pond and watch the ripple spread: it reaches everything one meter away before anything two meters away, everything two meters away before anything at three. BFS is that ripple running through a graph — it visits every node one edge away, then every node two edges away, and so on, never skipping ahead.',
     'The key invariant is that the queue always holds nodes in non-decreasing distance order. When a node comes off the queue at distance k, everything at distance k − 1 has already been processed — so the FIRST time you ever touch a node, you have provably arrived by a shortest route. That is why BFS can mark a node visited immediately and never reconsider it: any later arrival would only be longer.',

@@ -1,18 +1,21 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef } from 'react'
 import type { AlgorithmModule } from '../core/types'
 import { useStepPlayer } from '../core/useStepPlayer'
 import { PlayerControls } from './PlayerControls'
 import { PseudocodePanel } from './PseudocodePanel'
 import { ProblemsList } from './ProblemsList'
+import { JourneyPanel } from './JourneyPanel'
 
 function Narration({ text }: { text: string }) {
   const words = text.split(' ')
   return (
     <div className="narration">
       {words.map((w, i) => (
-        <span key={i} className="nw" style={{ animationDelay: `${Math.min(i * 26, 800)}ms` }}>
-          {w}{' '}
-        </span>
+        <Fragment key={i}>
+          <span className="nw" style={{ animationDelay: `${Math.min(i * 26, 800)}ms` }}>
+            {w}
+          </span>{' '}
+        </Fragment>
       ))}
     </div>
   )
@@ -97,14 +100,16 @@ export function AlgorithmPage({ algo, onBack }: { algo: AlgorithmModule; onBack:
         </div>
       </section>
 
+      <JourneyPanel naive={algo.problem.naive} journey={algo.journey} />
+
       <section className="aha-banner">
-        <div className="aha-label">③ the aha moment</div>
+        <div className="aha-label">④ the aha moment</div>
         <p className="aha-text">{algo.aha}</p>
       </section>
 
       <div className="stage-grid">
         <section className="panel">
-          <h2>④ Now watch that idea run</h2>
+          <h2>⑤ Now watch that idea run</h2>
           <div className="viz-stage">
             <Visualizer step={player.step} />
           </div>

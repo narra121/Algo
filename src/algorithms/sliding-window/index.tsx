@@ -170,6 +170,70 @@ export const slidingWindow: AlgorithmModule<SWState> = {
   },
   aha:
     'The moment R hits a repeated character, every window starting at or before its old copy is already poisoned — so L can leap forward past it and NEVER look back. Each of the 9 characters enters and leaves the window at most once, so ~18 pointer moves replace checking all 45 substrings.',
+  journey: [
+    {
+      title: 'Skip the substrings — measure the gaps between repeated letters',
+      spark:
+        'Only a repeated letter can break a substring, so why test substrings at all? Record where each letter occurs — the longest clean stretch should simply be the biggest gap between two occurrences of the same letter.',
+      pseudocode: [
+        'pos ← positions of every letter',
+        'best ← 0',
+        'for each letter with ≥ 2 occurrences:',
+        '    for consecutive occurrences p, q:',
+        '        best ← max(best, q − p)',
+        'return best',
+      ],
+      time: 'O(n)',
+      space: 'O(n)',
+      verdict: 'fail',
+      breaks:
+        'In "abcbadcab", b sits at indices 1, 3, 8 — and the gap from 3 to 8 promises the length-5 stretch "badca" (indices 3–7), which does hold b only once. But look inside it: \'a\' appears at BOTH index 4 and index 7. The stretch passes b\'s test and flunks a\'s. Predicted answer: 5. Real answer: 4.',
+      insight:
+        'One letter\'s gap only certifies that one letter. A valid stretch must be duplicate-free for EVERY letter at once — so you have to actually track the contents of a candidate stretch, not reason about letters in isolation.',
+    },
+    {
+      title: 'Track the contents — extend each start with a hash set',
+      spark:
+        'So track contents: from each starting index, walk right with a hash set and stop at the first repeat. No substring is ever re-scanned from scratch — each new character costs one O(1) set lookup.',
+      pseudocode: [
+        'best ← 0',
+        'for i ← 0 .. n − 1:',
+        '    seen ← empty set',
+        '    for j ← i .. n − 1:',
+        '        if s[j] in seen: break',
+        '        add s[j] to seen',
+        '    best ← max(best, size of seen)',
+      ],
+      time: 'O(n²)',
+      space: 'O(min(n, alphabet))',
+      verdict: 'partial',
+      breaks:
+        'Fully correct — starting at index 2 it extends through "cbad", stops at the second c, and finds the answer 4. But count the work: the 9 starts touch 4 + 3 + 5 + 5 + 4 + 4 + 3 + 2 + 1 ≈ 31 characters and rebuild the set 9 times, where ~18 pointer moves would do. The waste is naked when the start moves from 2 to 3: "bad" was certified duplicate-free a heartbeat ago, yet the set is emptied and b, a, d are all re-proven from scratch.',
+      insight:
+        'When a repeat at the right edge kills a run, everything you just verified is STILL clean — so don\'t restart. Keep the window\'s contents and evict from the LEFT just far enough to remove the clash.',
+    },
+    {
+      title: 'Sliding window — one window, two forward-only edges',
+      spark:
+        'Keep a single window and a single set. R admits one new character per step; if that character already sits inside, L evicts from the left just far enough to fix it. Neither edge ever moves backward.',
+      pseudocode: [
+        'best ← 0; left ← 0; seen ← empty set',
+        'for right ← 0 .. n − 1:',
+        '    while s[right] in seen:',
+        '        evict s[left] from seen; left ← left + 1',
+        '    add s[right] to seen',
+        '    best ← max(best, right − left + 1)',
+        'return best',
+      ],
+      time: 'O(n)',
+      space: 'O(min(n, alphabet))',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now: each of the 9 characters enters the window exactly once (R\'s 9 moves) and leaves at most once (L moves only 5 times here) — 14 pointer moves on this string, against 45 substrings and ~165 character checks for brute force. The inner while LOOKS nested, but its lifetime total is bounded by how far L can travel, so the whole run stays linear.',
+      insight:
+        'L can afford to only ever move forward because one duplicate doesn\'t kill one window — it condemns every start at or before its old copy in a single stroke. That is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Imagine reading a long banner through a stretchy picture frame you slide along the wall. You pull the right edge forward to take in one new letter at a time, and the moment the frame holds something it shouldn\'t — say, the same letter twice — you drag the left edge forward just far enough to fix it. You never lift the frame off the wall and you never slide either edge backwards.',
     'The key insight is that both edges only move forward, so every element enters the window once and leaves it at most once. The inner "shrink" loop looks nested, but its total cost across the WHOLE run is bounded by how far the left edge can travel — at most n steps. The invariant you maintain (here: no repeated character) is restored after every extension, which means the best answer is always one of the windows you actually held.',

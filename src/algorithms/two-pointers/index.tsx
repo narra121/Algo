@@ -124,6 +124,65 @@ export const twoPointers: AlgorithmModule<TPState> = {
   },
   aha:
     'In a sorted array, one check of the two ends is a verdict you can act on forever: if the sum is too small, the smallest number is too small for EVERY partner — so throw it away. Each check permanently kills one number, so n numbers need only n checks instead of n².',
+  journey: [
+    {
+      title: 'Remember what you have seen — a hash set of complements',
+      spark:
+        'The brute force re-scans the array for every i. So stop re-scanning: walk the array ONCE, and for each number x ask "have I already seen 34 − x?" — a hash set answers that instantly.',
+      pseudocode: [
+        'seen ← empty hash set',
+        'for each x in a:',
+        '    if (target − x) in seen: return the pair',
+        '    add x to seen',
+        'return nothing',
+      ],
+      time: 'O(n)',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'It actually works — by the time the walk reaches 23 it asks "seen 34 − 23 = 11?", and yes: found in 6 steps instead of up to 28 pair-checks. But it pays for the speed with O(n) extra memory, and notice what it never touched: the array is ALREADY SORTED, and this solution would run exactly the same on a shuffled array. We are buying with memory what the sortedness gives us for free.',
+      insight:
+        'One pass with no re-checking is the right speed — keep that. But find a way to let the sorted order, not a hash set, answer "is the partner here?"',
+    },
+    {
+      title: 'Use the sortedness — binary-search each complement',
+      spark:
+        'Sorted array means binary search. For each number x, binary-search the rest of the array for 34 − x: no extra memory, and each lookup is log n instead of a full scan.',
+      pseudocode: [
+        'for i ← 0 .. n − 1:',
+        '    j ← binarySearch(a, target − a[i], from i+1)',
+        '    if j found: return (i, j)',
+        'return nothing',
+      ],
+      time: 'O(n log n)',
+      space: 'O(1)',
+      verdict: 'partial',
+      breaks:
+        'Also correct, and memory-free: 8 elements × ~3 probes ≈ 24 probes in the worst case. But watch the searches: for x = 2 we hunt for 32, for x = 5 we hunt for 29, for x = 8 we hunt for 26… the wanted complement only ever moves LEFT as x moves right — yet every binary search forgets this and restarts blind from the middle, re-exploring territory the previous search already ruled out.',
+      insight:
+        'The partner we need drifts in ONE direction as x grows. So do not restart the search each time — keep a second pointer parked where the last search ended, and only ever walk it one way.',
+    },
+    {
+      title: 'Two pointers — squeeze from both ends',
+      spark:
+        'Put one finger on the smallest number and one on the largest, and let every comparison evict one of them: too small means the left number is useless forever, too big means the right one is.',
+      pseudocode: [
+        'left ← 0, right ← n − 1',
+        'while left < right:',
+        '    sum ← a[left] + a[right]',
+        '    if sum = target: return (left, right)',
+        '    if sum < target: left ← left + 1',
+        '    else:            right ← right − 1',
+      ],
+      time: 'O(n)',
+      space: 'O(1)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now: 2 + 28 = 30 < 34 evicts 2 from EVERY future pair, because 28 was its best possible partner. One comparison, one permanent elimination — for these 8 numbers the answer (11 + 23) arrives in just 4 comparisons instead of up to 28, with zero extra memory.',
+      insight:
+        'Each end-comparison is a verdict you can act on forever — which is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Imagine two people standing at opposite ends of a sorted bookshelf, looking for two books whose page counts add to exactly 30. If the current pair totals too few pages, the person at the thin end steps inward; too many, the thick-end person steps inward. They never need to backtrack.',
     'The key insight is monotonicity: because the array is sorted, when the sum is too small the leftmost element can never form the answer with ANYTHING (its best partner — the largest remaining — was just tried). So it can be discarded forever. Each comparison kills one element, so n elements need at most n comparisons.',

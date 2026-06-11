@@ -269,6 +269,71 @@ export const unionFind: AlgorithmModule<UFState> = {
   },
   aha:
     'Because every component is a tree that names one root as its spokesperson, merging two groups never touches the members — repoint one root at the other and every node beneath it switches allegiance in a single pointer write; so "connected?" is never a graph search, just two short walks to a root, and with rank + compression those walks stay effectively one hop forever.',
+  journey: [
+    {
+      title: 'Cache the answer in labels — comp[i] per node, relabel on merge',
+      spark:
+        'Re-running BFS for every question is absurd when the answer barely changes between unions. So store the answer: stamp every node with a component label, and "connected?" collapses to comp[a] = comp[b] — one comparison, no traversal.',
+      pseudocode: [
+        'comp[i] ← i for every node',
+        'connected?(a, b): return comp[a] = comp[b]',
+        'union(a, b):',
+        '    if comp[a] = comp[b]: stop',
+        '    old ← comp[b]',
+        '    for i ← 0 .. n − 1:',
+        '        if comp[i] = old: comp[i] ← comp[a]',
+      ],
+      time: 'O(1) query, O(n) union',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'Queries are now free — the mid-stream "0 connected to 4?" is just comp[0] = comp[4], one comparison. But every union scans all 8 nodes hunting for the losing label: 7 unions × 8 checks ≈ 56 operations on this tiny instance, and the final union(3,7) alone rewrites 4 labels — half the graph. At a million nodes, one unlucky union rewrites 500,000 labels. We did not kill the O(n) cost, we just moved it from queries to unions.',
+      insight:
+        'Caching connectivity in the nodes is the right move — it hurts only because EVERY member personally stores the group name. Let members store a pointer to someone else instead, so just one node has to know the name.',
+    },
+    {
+      title: 'Trees of parent pointers — merge by repointing one root',
+      spark:
+        'If each member points at its recruiter, a group becomes a tree and the root IS the group\'s name. Merging is one write — point a\'s root at b\'s root — and "connected?" asks whether two root-walks land in the same place.',
+      pseudocode: [
+        'parent[i] ← i for every node',
+        'find(x):',
+        '    while parent[x] ≠ x: x ← parent[x]',
+        '    return x',
+        'union(a, b):',
+        '    if find(a) ≠ find(b):',
+        '        parent[find(a)] ← find(b)   // a\'s root bows to b\'s',
+      ],
+      time: 'O(n) per find, worst case',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'On this stream it looks great: every union is a couple of hops plus one pointer write, and the query walks 0 → 1 → 3 and 4 → 5 → 7 — two hops each. But "a\'s root always bows to b\'s root" is reckless: feed these same 8 nodes the stream (0,1) (1,2) (2,3) (3,4) (4,5) (5,6) (6,7) and you weld one long chain — find(0) now climbs 7 hops, and on n nodes it is n − 1. The O(n) cost snuck back in, hiding inside find instead of union.',
+      insight:
+        'Chains form because tall trees blindly hang under short ones — and because a long path, once walked, never heals. Pick who bows by height, and make every find flatten the path it just climbed.',
+    },
+    {
+      title: 'Union by rank + path compression — the forest that flattens itself',
+      spark:
+        'Two cheap guards: attach the shorter tree under the taller (union by rank), and whenever find walks to a root, rewire the nodes it passed to point nearer that root (path compression). Both piggyback on work you were already doing.',
+      pseudocode: [
+        'parent[i] ← i, rank[i] ← 0 for every node',
+        'find(x): walk to the root, rewiring x to its grandparent as you go',
+        'union(a, b):',
+        '    ra ← find(a); rb ← find(b)',
+        '    if ra = rb: already connected — stop',
+        '    attach lower-rank root under higher   // union by rank',
+        '    on a rank tie: winner\'s rank += 1',
+      ],
+      time: 'O(α(n)) amortized per op',
+      space: 'O(n)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now. Rank holds this forest\'s height to 3, so the entire run — 7 unions, every find, the mid-stream query — costs about a dozen pointer hops versus ~56 label rewrites. And the deep finds pay forward: union(3,7) rewires parent[3] from 2 straight to root 0 mid-walk, so a walk that cost 2 hops costs 1 forever after. Together the two tricks amortize every operation to α(n) ≤ 4 — effectively constant.',
+      insight:
+        'A whole component\'s identity now lives in a single root, so merging thousand-node groups is still one pointer write — which is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Imagine clubs merging at a school. Each member remembers just one person — whoever recruited them — and only the founder remembers no one. To check whether two students are in the same club, each follows their recruiter chain up to a founder and you compare founders. When two clubs merge, nobody re-registers: one founder simply starts reporting to the other, and instantly every member of both clubs shares a root.',
     'The invariant is that every component is a tree whose root is its unique representative — so "connected?" reduces to "same root?". Two tricks keep root-finding cheap. Union by rank never lets a tall tree hide under a short one, and only grows rank on exact ties, so a rank-k root must command at least 2^k nodes. Path compression makes every find() rewire the nodes it visits to point nearer the root — reads literally repair the structure while answering the query.',

@@ -168,6 +168,84 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
   },
   aha:
     'The best haul up to house i depends on nothing but two numbers already in the table — dp[i−1] and dp[i−2] — so the millions of ways those hauls were achieved can be thrown away forever, collapsing 2^7 = 128 rob/skip futures into just 7 one-line table fills.',
+  journey: [
+    {
+      title: 'Greedy — rob every other house',
+      spark:
+        '"No two adjacent" sounds like alternation: rob houses 0, 2, 4, 6 or houses 1, 3, 5 — whichever alternation totals more. Two sums, one comparison, done in a single pass.',
+      pseudocode: [
+        'evens ← value[0] + value[2] + value[4] + …',
+        'odds  ← value[1] + value[3] + value[5] + …',
+        'return max(evens, odds)',
+      ],
+      time: 'O(n)',
+      space: 'O(1)',
+      verdict: 'fail',
+      breaks:
+        'On [2, 7, 9, 3, 1, 8, 4] the even houses total 2 + 9 + 1 + 4 = 16 and the odd houses total 7 + 3 + 8 = 18 — but the true best is 19, from houses 0, 2, and 5. The winning plan skips TWO houses in a row (the 3 and the 1) so it can take both the 9 and the 8, a rhythm no strict alternation can ever produce.',
+      insight:
+        'The rule only forbids adjacent picks — it never forces a pattern. Every house needs its own rob-or-skip decision, weighed against what the houses around it offer.',
+    },
+    {
+      title: 'Rob-or-skip recursion — try both choices at every house',
+      spark:
+        'Each house poses the same binary question: rob it (locking out the neighbor) or skip it. So define best(i) = the top haul from houses 0…i, and let recursion try both branches and keep the winner.',
+      pseudocode: [
+        'best(i):',
+        '    if i = 0: return value[0]',
+        '    if i = 1: return max(value[0], value[1])',
+        '    return max(best(i − 1),',
+        '               value[i] + best(i − 2))',
+      ],
+      time: 'O(2ⁿ)',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'It is correct — best(6) returns 19. But watch the call tree: pricing these 7 houses fires 25 calls to answer only 7 distinct questions. best(2) gets recomputed 5 times and best(1) 8 times, dutifully returning the same 11 and 7 on every visit. At 40 houses the tree balloons to roughly 331 million calls — Fibonacci growth in disguise.',
+      insight:
+        'There are only 7 distinct subproblems, and each answer never changes once known. Compute each one a single time, write it down, and every repeat visit becomes a lookup.',
+    },
+    {
+      title: 'Memoize — cache each answer the first time',
+      spark:
+        'All five recomputations of best(2) return the same 11, so remember it: before recursing, check a memo table; after computing, store the result. Same recursion, zero repeated work.',
+      pseudocode: [
+        'memo ← empty table',
+        'best(i):',
+        '    if memo[i] exists: return memo[i]',
+        '    (base cases as before)',
+        '    memo[i] ← max(best(i − 1), value[i] + best(i − 2))',
+        '    return memo[i]',
+      ],
+      time: 'O(n)',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'The 25 calls collapse to 7 real computations plus a few cache hits, and 40 houses now cost 40 fills instead of 331 million calls. But the recursion still dives 7 frames deep to house 0 before it can price house 6 — on a 100,000-house street that depth blows the stack. And look at the order the memo actually fills: 0, 1, 2, 3, 4, 5, 6. The recursion is an expensive way to discover plain left-to-right.',
+      insight:
+        'The fill order was never a mystery — each answer needs only the two entries just before it. So drop the recursion and write the table directly, left to right.',
+    },
+    {
+      title: 'Bottom-up table — fill dp left to right',
+      spark:
+        'Replace the call stack with a loop: seed dp[0] and dp[1], then march down the street filling each dp[i] from the two entries already sitting behind it.',
+      pseudocode: [
+        'dp[0] ← value[0]',
+        'dp[1] ← max(value[0], value[1])',
+        'for i ← 2 … n − 1:',
+        '    dp[i] ← max(dp[i − 1],',
+        '                value[i] + dp[i − 2])',
+        'return dp[n − 1]',
+      ],
+      time: 'O(n)',
+      space: 'O(n)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now: each of the 7 entries is written exactly once, and each write costs two lookups, an add, and a max — 7 constant-time fills versus the 128 subsets of brute force or the 25 calls of naive recursion. No call stack, no cache misses, no question ever answered twice.',
+      insight:
+        'And the table exposes one final economy: dp[i] only ever consults dp[i−1] and dp[i−2] — two numbers standing in for every plan that came before — which is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Imagine a burglar walking down a street with a notebook. At every house he jots one number: "best haul possible using the street up to here." When he reaches house 50 he never re-plans houses 1–49 from scratch — he just checks two notebook lines, does one addition and one comparison, and writes the next line. The notebook is the dp table, and it turns an overwhelming plan into a stroll.',
     'The key insight is that big problems often repeat the same small questions over and over. A naive recursion for house i asks about i−1 and i−2, which each ask about their predecessors — the same subproblems explode exponentially down the call tree. But the ANSWER to "best haul up to house i" is a single number that never changes once known (optimal substructure). Cache it the first time, and the exponential tree collapses into one linear pass: each entry is computed once, from a constant number of earlier entries.',

@@ -266,6 +266,87 @@ export const dijkstra: AlgorithmModule<DijkstraState> = {
   },
   aha:
     'With no negative tolls, the closest unsettled node can never be reached more cheaply — any other route would first detour through somewhere at least as far and then add more — so the first time a node is the closest, its distance is provably final and it can be locked forever. That one lock per node is why 6 pops and 9 edge checks beat searching all 42 paths.',
+  journey: [
+    {
+      title: 'Plain BFS — count hops, not tolls',
+      spark:
+        'Shortest path in a graph? That is BFS — explore in rings, one road at a time, and the first time you reach a town is the shortest way there. Just record the toll of whichever route arrives first.',
+      pseudocode: [
+        'dist[A] ← 0; queue ← {A}',
+        'while queue not empty:',
+        '    u ← dequeue front',
+        '    for each road u–v with toll w:',
+        '        if v never seen: dist[v] ← dist[u] + w; enqueue v',
+      ],
+      time: 'O(V + E)',
+      space: 'O(V)',
+      verdict: 'fail',
+      breaks:
+        'BFS reaches B in one hop and stamps it 4 via A–B — final, never revisited. But the two-hop route A→C→B costs 2 + 1 = 3. Same poison spreads to D: BFS records it at 4 + 5 = 9 via A→B→D, while the real cheapest is the three-hop A→C→B→D at 2 + 1 + 5 = 8. On a weighted map, fewer roads is not cheaper roads.',
+      insight:
+        'The expanding-ring picture is right — but the ring must grow by accumulated toll, not by hop count. Whatever comes next has to judge routes by their total cost.',
+    },
+    {
+      title: 'Greedy walk — always take the cheapest road out',
+      spark:
+        'Fine, track tolls. Walk the map like a thrifty traveler: standing in any town, surely the smart move is the cheapest road leaving it. Follow that rule from A and record each town as you arrive.',
+      pseudocode: [
+        'at ← A; cost ← 0; visited ← {A}',
+        'while some road leaves `at` to an unvisited town:',
+        '    pick the cheapest such road at–v (toll w)',
+        '    cost ← cost + w; dist[v] ← cost',
+        '    at ← v; add v to visited',
+      ],
+      time: 'O(V + E)',
+      space: 'O(V)',
+      verdict: 'fail',
+      breaks:
+        'Trace it: A takes A–C (2), C takes C–B (1, snubbing C–E at 5), B takes B–D (5), D takes D–E (2) — the walker reaches E carrying 2 + 1 + 5 + 2 = 10. But E’s true cheapest is 7, straight down the road it snubbed: A→C→E = 2 + 5. Optimizing the next edge in isolation lost the total.',
+      insight:
+        'One committed walker cannot do it. Keep a tentative best cost for EVERY town, and let any route that beats it overwrite — decisions must compare whole accumulated totals, never single edges.',
+    },
+    {
+      title: 'Relax with a plain queue — let cheaper routes overwrite',
+      spark:
+        'So combine the two lessons: keep BFS’s queue, but store the best toll found so far for each town, and whenever a route improves a town, update it and re-queue it so the improvement propagates.',
+      pseudocode: [
+        'dist[A] ← 0; dist[v] ← ∞ for all others; queue ← {A}',
+        'while queue not empty:',
+        '    u ← dequeue front  (arrival order — no priority)',
+        '    for each road u–v with toll w:',
+        '        if dist[u] + w < dist[v]:',
+        '            dist[v] ← dist[u] + w; enqueue v',
+      ],
+      time: 'O(V · E)',
+      space: 'O(V)',
+      verdict: 'partial',
+      breaks:
+        'It gets every answer right — but count the work. The queue pops D at a provisional 9 and dutifully relaxes all four of its roads (stamping F at 15). Then B improves to 3, drops D to 8, and D must be popped and fully re-relaxed — its second pass finds nothing, every check wasted. On this graph: 9 pops and 27 edge checks, versus the 6 pops and 9 relaxations the animation needs; B, D, and F are each processed twice, and on hostile graphs the re-work blows up to O(V · E).',
+      insight:
+        'All the re-processing came from popping towns whose costs were still provisional. Pop the unsettled town with the SMALLEST tentative cost instead, and no future route could ever undercut it — its number would already be final.',
+    },
+    {
+      title: 'Dijkstra — always pop the closest unsettled town',
+      spark:
+        'Swap the FIFO queue for a priority queue keyed by tentative cost, so the town you process is always the closest unsettled one — then its distance is final the moment you pop it, and it never needs a second look.',
+      pseudocode: [
+        'dist[s] ← 0; dist[v] ← ∞ for all others; PQ ← {(0, s)}',
+        'while PQ not empty:',
+        '    u ← pop node with smallest dist  (u is now settled)',
+        '    for each edge (u, v) with weight w:',
+        '        if v settled: skip',
+        '        if dist[u] + w ≥ dist[v]: keep dist[v]',
+        '        else: dist[v] ← dist[u] + w; push (dist[v], v)',
+      ],
+      time: 'O((V + E) log V)',
+      space: 'O(V + E)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is re-done: the 6 towns are popped exactly once each, in the order A(0), C(2), B(3), E(7), D(8), F(10), and a popped number never changes — D is relaxed at its true cost 8, never at a stale 9. Total work: 6 pops and 9 edge relaxations for a question whose brute force weighs 42 paths; the log V per heap operation is the entire price of always knowing who is closest.',
+      insight:
+        'The priority queue’s only job is to hand you the closest unsettled town — and with no negative tolls, that town’s cost is already unbeatable. That lock is the whole algorithm.',
+    },
+  ],
   intuition: [
     'Imagine pouring water onto your home city on a road map where every road is a channel and its length is how long water takes to flow through it. The flood front reaches the nearest town first, then the next nearest, and so on. The moment water first touches a town, you KNOW the fastest route there — water that arrives later, by definition, took longer. Dijkstra is that flood, simulated one town at a time.',
     'The invariant: when you pop the unsettled node with the smallest tentative distance, that distance is final. Why? Any alternative path to it must leave the settled region through some other unsettled node — which is already at least as far away — and then add edges with non-negative weight. It can only get worse. This is exactly why negative edge weights break Dijkstra: a "worse-for-now" path could later get a discount, invalidating the lock.',

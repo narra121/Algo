@@ -35,4 +35,13 @@ for (const a of algorithms) {
   if (a.generateSteps().length < 1) {
     throw new Error(`AlgoLens: "${a.id}" generated no steps`)
   }
+  if (a.journey.length < 2) {
+    throw new Error(`AlgoLens: "${a.id}" has only ${a.journey.length} journey attempts (need ≥2)`)
+  }
+  const lastIdx = a.journey.length - 1
+  a.journey.forEach((j, i) => {
+    if ((j.verdict === 'optimal') !== (i === lastIdx)) {
+      throw new Error(`AlgoLens: "${a.id}" journey must end with exactly one 'optimal' attempt`)
+    }
+  })
 }

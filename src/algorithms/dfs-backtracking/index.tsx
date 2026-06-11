@@ -194,6 +194,67 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
   },
   aha:
     'The instant two queens attack each other, every board you could build on top of that position is ALREADY dead — so one conflict check discards an entire subtree of futures without ever constructing them, and 4 queens fall into place after touching just 26 squares instead of grinding through 256 complete boards.',
+  journey: [
+    {
+      title: 'Bake the row rule into generation — one queen per row',
+      spark:
+        'Most of those 1,820 boards are silly — they stack two queens in the same row. Two queens can never share a row anyway, so only generate boards with exactly one queen per row: pick a column for each of the 4 rows.',
+      pseudocode: [
+        'for each (c0, c1, c2, c3) in 0..3 × 0..3 × 0..3 × 0..3:',
+        '    ok ← true',
+        '    for each pair of rows (r, s):',
+        '        if their queens share a column or diagonal: ok ← false',
+        '    if ok: return this board',
+      ],
+      time: 'O(nⁿ · n²)',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'Correct, and a real win: 4⁴ = 256 boards instead of 1,820, just by refusing to generate what a constraint already forbids. But verdicts still only come on FINISHED boards. Put queens at (0, 0) and (1, 0) — a column clash you can see after two placements — and 16 of the 256 boards extend that doomed prefix; this loop dutifully builds and rejects all 16, rediscovering the same clash 16 times. At up to 6 pair-checks per board that is ~1,500 checks, versus the 26 squares the animation touches.',
+      insight:
+        'Encoding a constraint into HOW you generate beats filtering afterwards — so push that further: check each placement the moment you make it, not after the board is full.',
+    },
+    {
+      title: 'Check as you place — and greedily take the first safe square',
+      spark:
+        'If a clash between rows 0 and 1 is visible after two placements, why finish the board at all? Build row by row, test every square before committing, and just take the first safe column in each row.',
+      pseudocode: [
+        'for row in 0 .. 3:',
+        '    col ← first column in this row not attacked',
+        '    if no such column: return "no solution"',
+        '    place queen at (row, col)    # and never look back',
+        'return the board',
+      ],
+      time: 'O(n²)',
+      space: 'O(n)',
+      verdict: 'fail',
+      breaks:
+        'Run it on this exact board. Row 0: col 0 is safe — take it. Row 1: cols 0 and 1 are attacked, col 2 is safe — take it. Row 2: col 0 shares a column, cols 1 and 3 are on diagonals from (1, 2), col 2 shares a column — every square is attacked. Greedy declares "no solution", yet [1, 3, 0, 2] solves the board. Each pick was locally safe; the combination was a trap it cannot escape.',
+      insight:
+        'Checking at every placement is exactly right — keep it. What is missing is the power to UNDO: a locally safe choice can doom every future row, so a dead end must send you back to revise the most recent pick, not give up.',
+    },
+    {
+      title: 'Backtracking — commit, explore, and undo on failure',
+      spark:
+        'Keep the greedy walk, but make every choice reversible: when a row has no safe square, lift the previous queen, try her next column, and only fail upward once a row is truly exhausted.',
+      pseudocode: [
+        'solve(row):',
+        '    if row = N: return true            # all queens placed',
+        '    for col in 0 .. N−1:',
+        '        if attacked(row, col): continue # prune this branch',
+        '        place queen at (row, col)       # choose',
+        '        if solve(row + 1): return true  # explore',
+        '        remove queen at (row, col)      # un-choose (backtrack)',
+      ],
+      time: 'O(N!) worst case',
+      space: 'O(N)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now. When row 2 dead-ends under queens at columns [0, 2], one undo discards all 16 complete boards built on that prefix — for the price of 4 checks. The whole row-0-at-col-0 branch (64 of the 256 boards) is buried after touching just 17 squares. In total the search touches 26 squares and undoes only 4 placements, and every square touched either advanced the solution or killed a subtree.',
+      insight:
+        'Each early conflict check is a verdict on an entire subtree of futures, not one board — which is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Imagine solving a hedge maze by always keeping one hand on the wall. At each fork you commit to a corridor and walk it to the end. Hit a dead end? You walk back to the most recent fork — undoing exactly the steps you took — and try the next corridor. You never redraw the whole map; you only ever revise your latest decision.',
     'The key insight is that a partial solution either already violates a constraint or it does not — and if it does, NO extension of it can ever succeed. So the instant a choice creates a conflict (a queen attacked, a parenthesis unbalanced, a sum overshot), you prune the entire subtree of futures built on it. Backtracking is depth-first search over the tree of partial solutions, where "undo the last choice" is what lets one shared, mutable board explore millions of boards.',

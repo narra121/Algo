@@ -194,6 +194,67 @@ export const binarySearch: AlgorithmModule<BSState> = {
   },
   aha:
     'Because the array is sorted, the middle element answers for its entire half: when the probe finds 28 < 37, every one of the 6 values to its left is even smaller — so all of them are thrown away forever on a single comparison. Halving like that pins 37 down in 3 probes instead of 12, and would find anything in a BILLION elements in about 30.',
+  journey: [
+    {
+      title: 'Build a hash map — make the lookup instant',
+      spark:
+        'Slow lookups? The classic fix is a hash map: pour all 12 values in once, and "where is 37?" becomes an O(1) question. Dictionaries exist for exactly this.',
+      pseudocode: [
+        'index ← empty hash map',
+        'for i ← 0 .. n − 1:',
+        '    index[a[i]] ← i',
+        'if target in index: return index[target]',
+        'return −1',
+      ],
+      time: 'O(n) build, O(1) lookup',
+      space: 'O(n)',
+      verdict: 'partial',
+      breaks:
+        'It answers correctly — but look at the bill. Building the map touches all 12 elements (12 insertions plus O(n) memory) before the single instant lookup, so for one question the total work is WORSE than the scan\'s 7 looks. And notice what it never used: the array is ALREADY SORTED, and this code runs identically on a shuffled copy. We are paying memory for speed the sortedness should hand us for free.',
+      insight:
+        'A side index is wasted effort when the data is already organized — sorted order IS an index. Use the order itself to skip elements, instead of inspecting every one.',
+    },
+    {
+      title: 'Jump search — leap in √n strides, scan the last block',
+      spark:
+        'If the values only ever increase, you don\'t have to look at every element — leap ahead in strides of ⌊√12⌋ = 3, and only when a probe overshoots 37 do you stop and walk through that one small block.',
+      pseudocode: [
+        'step ← ⌊√n⌋, i ← step − 1',
+        'while i < n and a[i] < target:',
+        '    i ← i + step',
+        'linear-scan the block a[i − step + 1 .. i]',
+        'return its index if found, else −1',
+      ],
+      time: 'O(√n)',
+      space: 'O(1)',
+      verdict: 'partial',
+      breaks:
+        'Genuinely faster: probe a[2] = 12, a[5] = 28, a[8] = 56 — overshot! — then scan the block and hit a[6] = 37. Four looks instead of seven. But the stride is blind to what it learns: when a[5] = 28 came back too small, that verdict condemned EVERYTHING left of index 5 — yet the fixed stride only credits it with clearing 3 cells. At a million elements, jump search still needs ~2,000 looks where 20 would do.',
+      insight:
+        'Each probe\'s verdict speaks for everything on one side of it — so stop eliminating fixed-size blocks and eliminate a constant FRACTION of whatever remains. The probe that splits the survivors evenly is the middle one.',
+    },
+    {
+      title: 'Binary search — probe the middle, halve the world',
+      spark:
+        'Always probe the exact middle of whatever is still alive: whichever way the comparison goes, the sorted order lets that single answer erase half of the remaining candidates at once.',
+      pseudocode: [
+        'lo ← 0, hi ← n − 1',
+        'while lo ≤ hi:',
+        '    mid ← ⌊(lo + hi) / 2⌋',
+        '    if a[mid] = target: return mid',
+        '    if a[mid] < target: lo ← mid + 1',
+        '    else:               hi ← mid − 1',
+        'return −1',
+      ],
+      time: 'O(log n)',
+      space: 'O(1)',
+      verdict: 'optimal',
+      breaks:
+        'Nothing is wasted now: one three-way comparison can never rule out more than half the candidates, and probing the middle rules out EXACTLY half, every time. Watch it on this array: a[5] = 28 < 37 kills six values at once, a[8] = 56 > 37 kills four more, and the third probe lands on 37 at index 6 — the space shrinks 12 → 6 → 2 → found, in 3 probes with zero extra memory. Doubling the array would cost just one more.',
+      insight:
+        'The middle element answers for its entire half — which is exactly the aha below.',
+    },
+  ],
   intuition: [
     'Think of guessing a number between 1 and 100 when every guess earns a "higher" or "lower". Nobody guesses 1, 2, 3… — you guess 50, then 75 or 25, then keep splitting. Seven guesses always suffice, because each answer throws away half of everything you haven\'t tried. Looking up "marmalade" in a dictionary works the same way: open to the middle, see "n", and never touch the back half again.',
     'The key insight is the invariant: at every moment, IF the target exists, it lies between LO and HI — and sortedness makes the middle element speak for its whole half. When a[mid] is too small, everything left of mid is even smaller, so all of it is provably wrong at once. One three-way comparison (smaller / equal / bigger) converts a single peek into the elimination of half the remaining candidates, and nothing eliminated ever needs a second look.',
