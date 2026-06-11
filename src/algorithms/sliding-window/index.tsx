@@ -151,8 +151,22 @@ export const slidingWindow: AlgorithmModule<SWState> = {
       'You are handed the string "abcbadcab" and asked: what is the longest stretch of consecutive characters in which no letter appears twice — and where is it? That exact question is what the animation below is solving, live.',
     input: 'The 9-character string "abcbadcab".',
     output: 'The longest duplicate-free substring — here "cbad" (indices 2–5), length 4.',
-    naive:
-      'Test every substring for repeats: "abcbadcab" has 45 substrings, and scanning each one for duplicates touches ~165 characters in total — for a 9-letter string. The window does the whole job in about 18 pointer moves, and at n = 100,000 that gap becomes billions of checks versus 200,000.',
+    naive: {
+      description:
+        'Test every substring for repeats: "abcbadcab" has 45 substrings, and scanning each one for duplicates touches ~165 characters in total — for a 9-letter string.',
+      pseudocode: [
+        'best ← 0',
+        'for i ← 0 .. n − 1:',
+        '    for j ← i .. n − 1:',
+        '        if s[i..j] has no repeated letter:',
+        '            best ← max(best, j − i + 1)',
+        'return best',
+      ],
+      time: 'O(n³)',
+      space: 'O(min(n, alphabet))',
+      issues:
+        'Three nested layers of waste: substring (i..j) is re-scanned from scratch even though (i..j−1) was verified duplicate-free a moment earlier — one new letter forgets all previous work. Worse, once a duplicate poisons (i..j), every longer substring starting at i is doomed too, yet they all still get checked. At n = 100,000 that is billions of character checks where the window needs ~200,000 pointer moves.',
+    },
   },
   aha:
     'The moment R hits a repeated character, every window starting at or before its old copy is already poisoned — so L can leap forward past it and NEVER look back. Each of the 9 characters enters and leaves the window at most once, so ~18 pointer moves replace checking all 45 substrings.',

@@ -175,8 +175,22 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
     input: 'An empty 4×4 board and 4 queens to place.',
     output:
       'One valid arrangement — here, queens at columns [1, 3, 0, 2] of rows 0–3 (the board\'s only solution up to mirror symmetry).',
-    naive:
-      'Generate every complete board first, check it after: dropping 4 queens on any of the 16 squares gives C(16,4) = 1,820 boards, each needing up to 6 pair-checks — roughly 11,000 checks. Even the smarter "one queen per row" version still builds all 4⁴ = 256 finished boards before noticing most were doomed by their very first queen.',
+    naive: {
+      description:
+        'Generate every complete board first, check it after: dropping 4 queens on any of the 16 squares gives C(16,4) = 1,820 boards, each needing up to 6 pair-checks — roughly 11,000 checks in all.',
+      pseudocode: [
+        'for each way to place 4 queens on the 16 squares:',
+        '    ok ← true',
+        '    for each pair of queens (p, q):',
+        '        if p, q share a row, column, or diagonal:',
+        '            ok ← false',
+        '    if ok: return this board',
+      ],
+      time: 'O(C(n², n) · n²)',
+      space: 'O(n)',
+      issues:
+        'Verdicts only come on FINISHED boards, so a conflict between the first two queens — visible after two placements — is rediscovered separately on every one of the hundreds of complete boards that contain it. Even the smarter one-queen-per-row version still builds all 4⁴ = 256 finished boards before judging any of them. Backtracking checks after every single placement and discards the whole doomed subtree on the spot, touching just 26 squares total.',
+    },
   },
   aha:
     'The instant two queens attack each other, every board you could build on top of that position is ALREADY dead — so one conflict check discards an entire subtree of futures without ever constructing them, and 4 queens fall into place after touching just 26 squares instead of grinding through 256 complete boards.',

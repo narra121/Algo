@@ -246,8 +246,21 @@ export const heap: AlgorithmModule<HeapState> = {
       'Numbers arrive one at a time: 3, 1, 5, 12, 2, 11, 9, 7. After EVERY arrival you must be able to answer instantly: what is the 3rd largest value seen so far? By the final arrival the answer is 9, because the three largest are 12, 11, and 9. That exact question is what the animation below is solving, one arrival at a time.',
     input: 'A stream of 8 numbers — 3, 1, 5, 12, 2, 11, 9, 7 — and k = 3.',
     output: 'The 3rd largest value seen so far, after every arrival. Final answer: 9 (the kept top three are 12, 11, 9).',
-    naive:
-      'Store every number ever seen and re-sort the whole list after each arrival: for this tiny stream that is 8 sorts over lists of size 1, 2, …, 8 — 36 values shuffled to extract one number — and all 8 values held in memory forever. For a million-item stream that becomes a million stored numbers and a full re-sort per tick, when only 3 of them ever mattered.',
+    naive: {
+      description:
+        'Store every number ever seen and re-sort the whole list after each arrival: for this tiny stream that is 8 sorts over lists of size 1, 2, …, 8 — 36 values shuffled to extract one number — and all 8 values held in memory forever.',
+      pseudocode: [
+        'seen ← empty list',
+        'for each x in stream:',
+        '    append x to seen',
+        '    sort seen in descending order',
+        '    answer ← seen[k − 1]',
+      ],
+      time: 'O(n log n) per arrival',
+      space: 'O(n)',
+      issues:
+        'Every arrival pays to re-order ALL history just to read off one value, and the previous sort is discarded as if it never happened. Memory grows forever even though only the top k = 3 numbers can ever matter. For a million-item stream that is a million stored numbers and a full million-element re-sort per tick — versus a 3-slot heap doing at most two swaps per arrival.',
+    },
   },
   aha:
     'You never need the top 3 in order — you only need their WEAKEST member, and a min-heap pins exactly that value to its root: any arrival that cannot beat the root is provably outside the top 3 and can be thrown away forever after a single comparison, so a stream of any length needs just 3 slots of memory and at most log₂ 3 swaps per arrival instead of storing and sorting everything.',

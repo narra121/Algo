@@ -246,8 +246,23 @@ export const dijkstra: AlgorithmModule<DijkstraState> = {
       'You are given a map of 6 towns (A–F) joined by 9 two-way roads with tolls: A–B costs 4, A–C costs 2, B–C costs 1, B–D costs 5, C–D costs 8, C–E costs 5, D–E costs 2, D–F costs 6, E–F costs 3. Starting from town A, what is the cheapest total toll to reach EACH of the other five towns? That exact question is what the animation below is solving, live.',
     input: 'The 6-node weighted graph above (9 undirected edges), and the source node A.',
     output: 'The cheapest cost from A to every node — here A=0, B=3, C=2, D=8, E=7, F=10.',
-    naive:
-      'Enumerate every simple path out of A and keep the cheapest per destination: even this tiny graph hides 42 such paths — 13 different routes to F alone — and the count explodes factorially as the map grows. Dijkstra answers the same question with just 6 pops and 9 edge relaxations.',
+    naive: {
+      description:
+        'Enumerate every simple path out of A and keep the cheapest per destination: even this tiny graph hides 42 such paths — 13 different routes to F alone.',
+      pseudocode: [
+        'best[v] ← ∞ for every town v',
+        'walk(town, cost, visited):',
+        '    best[town] ← min(best[town], cost)',
+        '    for each road town–next with toll w:',
+        '        if next not in visited:',
+        '            walk(next, cost + w, visited ∪ {town})',
+        'walk(A, 0, ∅)',
+      ],
+      time: 'O(V!) — factorial path explosion',
+      space: 'O(V) per active path',
+      issues:
+        'Shared prefixes are re-priced endlessly: the stretch A→C→B is the opening of dozens of the 42 paths, and its toll is re-summed for every single one. Nothing is ever declared finished, so even after stumbling on the best route to F the search keeps grinding through 12 worse ones. The path count grows factorially with the map; Dijkstra answers the same question with 6 pops and 9 edge relaxations by settling each town exactly once.',
+    },
   },
   aha:
     'With no negative tolls, the closest unsettled node can never be reached more cheaply — any other route would first detour through somewhere at least as far and then add more — so the first time a node is the closest, its distance is provably final and it can be locked forever. That one lock per node is why 6 pops and 9 edge checks beat searching all 42 paths.',

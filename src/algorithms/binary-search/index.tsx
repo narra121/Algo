@@ -177,8 +177,20 @@ export const binarySearch: AlgorithmModule<BSState> = {
       'You are handed the sorted array [3, 8, 12, 19, 23, 28, 37, 41, 56, 64, 72, 89] and asked one question: does 37 appear in it — and at what index? That exact hunt is what the animation below performs, live.',
     input: 'A sorted array of 12 numbers, and the target value 37.',
     output: 'The index where 37 lives — here, index 6, reached after only 3 probes.',
-    naive:
-      'Scan left to right: 3? no. 8? no. 12? no… You would inspect 7 elements one by one just to reach 37, and all 12 if the target were absent. Scale that up and a million-element array costs up to a million looks — all while ignoring the gift that someone already sorted the data.',
+    naive: {
+      description:
+        'Linear scan, left to right: 3? no. 8? no. 12? no… You would inspect 7 elements one by one just to reach 37, and all 12 if the target were absent — all while ignoring the gift that someone already sorted the data.',
+      pseudocode: [
+        'for i ← 0 .. n − 1:',
+        '    if a[i] = target:',
+        '        return i',
+        'return not found',
+      ],
+      time: 'O(n)',
+      space: 'O(1)',
+      issues:
+        'Each look eliminates exactly ONE candidate: after checking 3, you still know nothing about the other 11 elements. The scan throws away the one thing sortedness offers — that a single comparison against the middle could rule out half the array at once. On a million-element array that is up to 1,000,000 looks where 20 would do, and the gap doubles every time the data doubles.',
+    },
   },
   aha:
     'Because the array is sorted, the middle element answers for its entire half: when the probe finds 28 < 37, every one of the 6 values to its left is even smaller — so all of them are thrown away forever on a single comparison. Halving like that pins 37 down in 3 probes instead of 12, and would find anything in a BILLION elements in about 30.',

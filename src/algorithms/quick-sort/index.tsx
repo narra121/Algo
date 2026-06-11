@@ -176,8 +176,21 @@ export const quickSort: AlgorithmModule<QSState> = {
       'You are handed the jumbled array [29, 10, 14, 37, 13, 25, 8, 31] and asked to rearrange it, in place, into ascending order: [8, 10, 13, 14, 25, 29, 31, 37]. That exact rearrangement — these eight numbers, no extra array — is what the animation below performs, live.',
     input: 'An unsorted array of 8 numbers: [29, 10, 14, 37, 13, 25, 8, 31].',
     output: 'The same 8 numbers in ascending order: [8, 10, 13, 14, 25, 29, 31, 37].',
-    naive:
-      'Selection sort: rescan everything unsorted for the minimum, again and again — 7 + 6 + 5 + … + 1 = 28 comparisons for these 8 numbers, every single time, because each pass learns nothing that helps the next. At n²/2 that is ~500 billion comparisons for a million items. Quick sort finishes this very array in 21 comparisons, and ~20 million at a million items.',
+    naive: {
+      description:
+        'Selection sort: rescan everything still unsorted for the minimum, place it, and repeat — 7 + 6 + 5 + … + 1 = 28 comparisons for these 8 numbers, every single time, even if the array starts nearly sorted.',
+      pseudocode: [
+        'for i ← 0 .. n − 2:',
+        '    m ← i',
+        '    for j ← i + 1 .. n − 1:',
+        '        if a[j] < a[m]: m ← j',
+        '    swap a[i], a[m]',
+      ],
+      time: 'O(n²) — always',
+      space: 'O(1)',
+      issues:
+        'Each pass scans nearly the whole remainder, finds one minimum, and then FORGETS every other comparison it just made — pass two re-learns facts pass one already knew. The cost is n²/2 no matter what: ~500 billion comparisons for a million items. Quick sort\'s partition pass spends its n comparisons buying something permanent — a pivot locked in its final slot and the problem cut in two — finishing this very array in 21 comparisons and ~20 million at a million items.',
+    },
   },
   aha:
     'One sweep does not "roughly place" the pivot — it provably locks it into its FINAL sorted slot, because everything smaller now sits to its left and everything bigger to its right, so no element ever needs to cross that boundary again. That one irreversible fact splits the problem in two for good each pass: about log n rounds of n cheap comparisons instead of n² of endless reshuffling.',

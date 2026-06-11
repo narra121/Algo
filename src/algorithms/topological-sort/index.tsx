@@ -230,8 +230,22 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
       'A course catalog has 7 courses — Intro to CS, Calculus, Data Structures, Discrete Math, Algorithms, Databases, Capstone — linked by 8 prerequisite arrows (e.g. Intro to CS → Data Structures, Algorithms → Capstone). In what order can you take all 7 so that every arrow points forward — every prerequisite finished before the course that needs it? That exact question is what the animation below is solving, live.',
     input: '7 courses (A–G) and 8 prerequisite arrows "u must come before v" forming a DAG.',
     output: 'One valid ordering of all 7 — here, A → B → C → D → F → E → G — or proof that none exists (a cycle).',
-    naive:
-      'Try every possible ordering and check it: 7! = 5,040 permutations, each verified against all 8 arrows — about 40,320 checks for just 7 courses. At 20 courses that becomes 2.4 quintillion permutations. Kahn’s algorithm does this instance in 15 operations: 7 dequeues + 8 edge deletions.',
+    naive: {
+      description:
+        'Try every possible ordering and check it: 7! = 5,040 permutations, each verified against all 8 arrows — about 40,320 checks for just 7 courses.',
+      pseudocode: [
+        'for each permutation P of the n courses:',
+        '    valid ← true',
+        '    for each arrow u → v:',
+        '        if u comes after v in P: valid ← false',
+        '    if valid: return P',
+        'return impossible',
+      ],
+      time: 'O(n! · E)',
+      space: 'O(n)',
+      issues:
+        'Thousands of permutations share the same fatal early mistake — Capstone scheduled first dooms 720 orderings at once — yet each one is generated and checked independently, because the enumeration never learns WHY an ordering failed. Factorial growth is merciless: 20 courses means 2.4 quintillion permutations. Kahn\'s algorithm reads the answer straight off the in-degrees and finishes this instance in 15 operations: 7 dequeues + 8 edge deletions.',
+    },
   },
   aha:
     'A course with in-degree 0 has every prerequisite already behind it, so scheduling it next can NEVER break the order — and once placed it can be deleted forever, which may unblock its neighbors. Repeating that one always-safe move sorts all 7 courses in V + E = 15 operations instead of auditing 5,040 permutations.',

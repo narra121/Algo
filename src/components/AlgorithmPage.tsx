@@ -63,21 +63,48 @@ export function AlgorithmPage({ algo, onBack }: { algo: AlgorithmModule; onBack:
             <span className="plabel">find</span>
             {algo.problem.output}
           </div>
-          <div className="pfact naive">
-            <span className="plabel">the painful way</span>
-            {algo.problem.naive}
+        </div>
+      </section>
+
+      <section className="panel naive-card">
+        <h2>② The brute force — and why it hurts</h2>
+        <p className="pstatement">{algo.problem.naive.description}</p>
+        <div className="naive-grid">
+          <div className="naive-code">
+            <div className="viz-caption">brute-force pseudocode</div>
+            <div className="code-lines">
+              {algo.problem.naive.pseudocode.map((line, i) => (
+                <div key={i} className="code-line">
+                  <span className="ln">{i + 1}</span>
+                  <span>{line}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="naive-cost">
+            <div className="viz-caption">what it costs</div>
+            <div className="row">
+              <span className="chip bad">time {algo.problem.naive.time}</span>
+              <span className="chip bad">space {algo.problem.naive.space}</span>
+            </div>
+            <p className="why">{algo.problem.naive.issues}</p>
+            <div className="vs-line">
+              <span className="vs-label">this pattern instead</span>
+              <span className="chip time">time {algo.complexity.time}</span>
+              <span className="chip space">space {algo.complexity.space}</span>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="aha-banner">
-        <div className="aha-label">② the aha moment</div>
+        <div className="aha-label">③ the aha moment</div>
         <p className="aha-text">{algo.aha}</p>
       </section>
 
       <div className="stage-grid">
         <section className="panel">
-          <h2>③ Now watch that idea run</h2>
+          <h2>④ Now watch that idea run</h2>
           <div className="viz-stage">
             <Visualizer step={player.step} />
           </div>

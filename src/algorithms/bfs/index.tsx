@@ -211,8 +211,23 @@ export const bfs: AlgorithmModule<BFSState> = {
       'You are dropped at S in the top-left corner of a 6×8 maze where 15 of the 48 cells are walls. Moving one cell at a time (up, down, left, or right — never through a wall), what is the FEWEST moves needed to reach T in the bottom-right corner, and which route achieves it? That exact question is what the animation below is solving, live.',
     input: 'A 6×8 grid with 15 wall cells; start S at (0,0), target T at (5,7); every move costs exactly 1.',
     output: 'The minimum number of moves — here, 12 — plus one concrete 12-move route from S to T.',
-    naive:
-      'Try every route and keep the shortest: this tiny maze hides 6 distinct wall-free routes (12, 16, 18, 20, 24, and 26 moves long), and exhaustive backtracking burns 165 steps wandering into dead ends to enumerate them all — only after seeing every last route can it swear nothing beats 12. And the route count explodes exponentially as mazes grow.',
+    naive: {
+      description:
+        'Exhaustive backtracking — try every route and keep the shortest: this tiny maze hides 6 distinct wall-free routes (12, 16, 18, 20, 24, and 26 moves long), and enumerating them burns 165 steps wandering into dead ends.',
+      pseudocode: [
+        'best ← ∞',
+        'explore(cell, moves, visited):',
+        '    if cell = T: best ← min(best, moves); return',
+        '    for each open neighbor not in visited:',
+        '        explore(neighbor, moves + 1, visited ∪ {cell})',
+        'explore(S, 0, ∅)',
+        'return best',
+      ],
+      time: 'O(branchᵈᵉᵖᵗʰ) — exponential',
+      space: 'O(path length)',
+      issues:
+        'It cannot declare ANY answer final until every last route is exhausted — only after seeing all 6 routes can it swear nothing beats 12. The same cell gets re-walked once per route that passes through it, so shared prefixes are re-explored again and again, and the route count explodes exponentially as the maze grows. BFS earns the same minimality guarantee by visiting each of the 33 reachable cells exactly once.',
+    },
   },
   aha:
     'Because BFS finishes EVERY cell at distance k before touching any cell at distance k+1, the first time it reaches a cell is provably the shortest way there — so each cell can be sealed forever on first touch. One visit per cell (33 here) buys the minimality guarantee that brute force needs all 165 backtracking steps to earn.',

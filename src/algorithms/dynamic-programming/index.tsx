@@ -150,8 +150,21 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
       'A street of seven houses holds cash [2, 7, 9, 3, 1, 8, 4]. Robbing any two adjacent houses trips the alarm, so the question is: what is the LARGEST total you can steal without ever hitting two neighbors? That exact question, on these exact seven numbers, is what the animation below solves live.',
     input: 'A row of 7 cash amounts: [2, 7, 9, 3, 1, 8, 4], plus the rule that no two adjacent houses may both be robbed.',
     output: 'The maximum legal haul — here 19, by robbing houses 0, 2, and 5 (2 + 9 + 8).',
-    naive:
-      'Enumerate every rob/skip combination: 2^7 = 128 subsets for just these 7 houses, then discard the illegal ones and total the rest. A 40-house street would already need over a trillion — and almost all that work re-answers the same question ("best haul up to house i") again and again.',
+    naive: {
+      description:
+        'Enumerate every rob/skip combination: 2⁷ = 128 subsets for just these 7 houses, then discard the illegal ones (two neighbors robbed) and total what survives.',
+      pseudocode: [
+        'best ← 0',
+        'for each subset S of the n houses:',
+        '    if no two houses in S are adjacent:',
+        '        best ← max(best, sum of cash in S)',
+        'return best',
+      ],
+      time: 'O(2ⁿ · n)',
+      space: 'O(n)',
+      issues:
+        'The same sub-question — "what is the best haul up to house i?" — gets re-answered inside exponentially many subsets, because the enumeration never writes anything down. Doubling the street doubles the EXPONENT: 7 houses cost 128 subsets, a 40-house street already needs over a trillion. DP answers each of the 7 sub-questions exactly once and reads the rest from the table.',
+    },
   },
   aha:
     'The best haul up to house i depends on nothing but two numbers already in the table — dp[i−1] and dp[i−2] — so the millions of ways those hauls were achieved can be thrown away forever, collapsing 2^7 = 128 rob/skip futures into just 7 one-line table fills.',

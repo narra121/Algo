@@ -250,8 +250,22 @@ export const unionFind: AlgorithmModule<UFState> = {
       '8 isolated nodes and a stream of 7 unions: (0,1) (2,3) (4,5) (6,7) (1,3) (5,7) (3,7), with the query "0 connected to 4?" arriving after the sixth.',
     output:
       'The live component count at each step (8 → 7 → 6 → 5 → 4 → 3 → 2 → 1), and the query answer: after six unions, 0 and 4 are NOT connected — one union later, they are.',
-    naive:
-      'Keep a component label on every node and, after each union, rescan and relabel the merged group: up to 8 label rewrites × 7 unions = ~56 writes for this tiny instance — or re-run a full BFS per query, touching all 8 nodes and every edge each time. With a million nodes and streaming edges that snowballs to O(n) work per union, O(n·m) total, redoing from scratch what the last answer already knew.',
+    naive: {
+      description:
+        'Keep an edge list and re-run a full BFS/DFS from scratch for every "connected?" question — or keep a component label on every node and relabel the whole merged group after each union: up to 8 rewrites × 7 unions ≈ 56 writes for this tiny instance.',
+      pseudocode: [
+        'on union(a, b):  add edge a–b to the list',
+        'on connected?(a, b):',
+        '    run BFS from a over ALL current edges',
+        '    return true if b was reached',
+        'on countComponents:',
+        '    BFS from every unvisited node, counting starts',
+      ],
+      time: 'O(V + E) per query',
+      space: 'O(V + E)',
+      issues:
+        'Every query starts from zero, re-deriving connectivity the previous query already proved — nothing learned is ever kept. With a million nodes and a stream of m queries that snowballs to O(m·(V+E)) total work, and the relabeling variant is no better: one unlucky union rewrites half the graph. Union-Find caches the answer in the forest itself, so each new question costs two near-constant root walks instead of a full traversal.',
+    },
   },
   aha:
     'Because every component is a tree that names one root as its spokesperson, merging two groups never touches the members — repoint one root at the other and every node beneath it switches allegiance in a single pointer write; so "connected?" is never a graph search, just two short walks to a root, and with rank + compression those walks stay effectively one hop forever.',

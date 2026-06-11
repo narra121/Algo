@@ -423,7 +423,7 @@ button {
 
 .pfacts {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.4fr;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
@@ -452,12 +452,81 @@ button {
   margin-bottom: 6px;
 }
 
-.pfact.naive {
-  border-color: rgba(255, 107, 129, 0.3);
+/* brute-force card */
+.naive-card {
+  margin-bottom: 18px;
+  border-left: 3px solid var(--rose);
 }
 
-.pfact.naive .plabel {
+.naive-card .pstatement {
+  color: var(--muted);
+}
+
+.naive-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .naive-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.naive-code .viz-caption,
+.naive-cost .viz-caption {
+  margin-bottom: 10px;
   color: var(--rose);
+}
+
+.naive-code .code-lines {
+  background: rgba(10, 15, 34, 0.6);
+  border: 1px solid rgba(255, 107, 129, 0.2);
+  border-radius: var(--r-md);
+  padding: 12px 8px;
+}
+
+.naive-code .code-line .ln {
+  color: var(--rose);
+  opacity: 0.5;
+}
+
+.naive-cost .row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.naive-cost .why {
+  color: var(--muted);
+  font-size: 14.5px;
+  margin: 0 0 16px;
+}
+
+.chip.bad {
+  color: var(--rose);
+  border-color: rgba(255, 107, 129, 0.4);
+  background: var(--rose-dim);
+}
+
+.vs-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.vs-line .vs-label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mint);
 }
 
 .aha-banner {

@@ -36,8 +36,25 @@ export interface ProblemSetup {
   input: string
   /** What we must produce, with the real answer when known. */
   output: string
-  /** The obvious brute-force approach and its cost, with real numbers for THIS input. */
-  naive: string
+  /** The obvious brute-force approach — shown in full so the clever solution has contrast. */
+  naive: NaiveApproach
+}
+
+/** The brute-force way to solve the same problem, and why it hurts. */
+export interface NaiveApproach {
+  /** Prose: the obvious approach and its cost, with real numbers for THIS input. */
+  description: string
+  /** Short pseudocode of the brute-force solution (4–8 lines). */
+  pseudocode: string[]
+  /** e.g. "O(n²)" */
+  time: string
+  /** e.g. "O(1)" */
+  space: string
+  /**
+   * What is actually wrong with it: where the wasted work hides, how it scales
+   * (with real numbers), what it fails to exploit. 2–4 sentences.
+   */
+  issues: string
 }
 
 export interface AlgorithmModule<S = any> {

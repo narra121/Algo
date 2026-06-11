@@ -179,8 +179,22 @@ export const mergeSort: AlgorithmModule<MSState> = {
       'You are handed the scrambled array [38, 27, 43, 3, 9, 82, 10, 5] and asked: rearrange these eight numbers into ascending order, producing [3, 5, 9, 10, 27, 38, 43, 82] — with a running time you can guarantee no matter how badly scrambled the input is. That exact sort is what the animation below performs, live.',
     input: 'An unsorted array of 8 numbers: [38, 27, 43, 3, 9, 82, 10, 5].',
     output: 'The same 8 numbers in ascending order: [3, 5, 9, 10, 27, 38, 43, 82].',
-    naive:
-      'Bubble or selection sort: sweep the array over and over, comparing adjacent values — up to 28 pair-comparisons (8·7/2) for these 8 numbers, and ~n²/2 in general. At 8 elements that is survivable; at a million elements it is ~500 billion comparisons, while merge sort needs only ~20 million — a 25,000× difference from the same starting data.',
+    naive: {
+      description:
+        'Bubble sort: sweep the array over and over, swapping adjacent values that are out of order — up to 28 pair-comparisons (8·7/2) for these 8 numbers, repeated pass after pass until a sweep finds nothing to fix.',
+      pseudocode: [
+        'repeat:',
+        '    swapped ← false',
+        '    for i ← 0 .. n − 2:',
+        '        if a[i] > a[i+1]:',
+        '            swap a[i], a[i+1]; swapped ← true',
+        'until swapped = false',
+      ],
+      time: 'O(n²)',
+      space: 'O(1)',
+      issues:
+        'Each pass moves a value roughly ONE position toward home — 82 sitting at the front of a million-element array needs nearly a million passes\' worth of nudges. Comparisons between the same neighbors repeat across passes, and nothing global is ever learned from a sweep. At a million elements that is ~500 billion comparisons, while merge sort needs ~20 million — a 25,000× difference from the same starting data.',
+    },
   },
   aha:
     'Sorting chaos is hard, but merging two ALREADY-SORTED lists is almost free: the front of a sorted list is its minimum, so whichever front is smaller beats everything still waiting in BOTH lists and can be locked into its final position forever. Split until every piece is a single element — sorted by definition — and the whole job becomes log₂ n levels of these cheap zips: 8 × 3 = 24 placements here instead of n²/2 comparisons.',

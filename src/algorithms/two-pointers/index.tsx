@@ -106,8 +106,21 @@ export const twoPointers: AlgorithmModule<TPState> = {
       'You are handed the sorted array [2, 5, 8, 11, 15, 19, 23, 28] and asked: do two of these numbers add up to exactly 34 — and which two? That exact question is what the animation below is solving, live.',
     input: 'A sorted array of 8 numbers, and a target sum of 34.',
     output: 'The two numbers (and their positions) that sum to 34 — here, 11 + 23.',
-    naive:
-      'Check every possible pair: 28 pair-checks for just 8 numbers, and ~n²/2 for big arrays. Worse — it completely ignores that someone already sorted the array for us.',
+    naive: {
+      description:
+        'The obvious approach: check every possible pair until one sums to 34. For these 8 numbers that is up to 28 pair-checks — and it completely ignores that someone already sorted the array for us.',
+      pseudocode: [
+        'for i ← 0 .. n − 2:',
+        '    for j ← i + 1 .. n − 1:',
+        '        if a[i] + a[j] = target:',
+        '            return (i, j)',
+        'return nothing',
+      ],
+      time: 'O(n²)',
+      space: 'O(1)',
+      issues:
+        'The nested loops learn nothing from failure: discovering 2 + 5 is too small tells it nothing about 2 + 8, so every pair gets its own check. Double the array and the work quadruples — at n = 10,000 that is ~50 million checks where 10,000 would do. Worst of all, the sorted order (the one thing that could prune pairs wholesale) is never used.',
+    },
   },
   aha:
     'In a sorted array, one check of the two ends is a verdict you can act on forever: if the sum is too small, the smallest number is too small for EVERY partner — so throw it away. Each check permanently kills one number, so n numbers need only n checks instead of n².',
