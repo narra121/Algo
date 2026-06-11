@@ -1,9 +1,10 @@
 import type { AlgorithmModule, Step } from '../../core/types'
+import { bsearchDemo, hashDemo, naiveDemo } from './demos'
 
 /* Canonical example: Two Sum II — find two numbers in a sorted array summing to a target. */
 
-const ARR = [2, 5, 8, 11, 15, 19, 23, 28]
-const TARGET = 34
+export const ARR = [2, 5, 8, 11, 15, 19, 23, 28]
+export const TARGET = 34
 
 interface TPState {
   arr: number[]
@@ -120,6 +121,7 @@ export const twoPointers: AlgorithmModule<TPState> = {
       space: 'O(1)',
       issues:
         'The nested loops learn nothing from failure: discovering 2 + 5 is too small tells it nothing about 2 + 8, so every pair gets its own check. Double the array and the work quadruples — at n = 10,000 that is ~50 million checks where 10,000 would do. Worst of all, the sorted order (the one thing that could prune pairs wholesale) is never used.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -143,6 +145,7 @@ export const twoPointers: AlgorithmModule<TPState> = {
         'It actually works — by the time the walk reaches 23 it asks "seen 34 − 23 = 11?", and yes: found in 6 steps instead of up to 28 pair-checks. But it pays for the speed with O(n) extra memory, and notice what it never touched: the array is ALREADY SORTED, and this solution would run exactly the same on a shuffled array. We are buying with memory what the sortedness gives us for free.',
       insight:
         'One pass with no re-checking is the right speed — keep that. But find a way to let the sorted order, not a hash set, answer "is the partner here?"',
+      demo: hashDemo,
     },
     {
       title: 'Use the sortedness — binary-search each complement',
@@ -161,6 +164,7 @@ export const twoPointers: AlgorithmModule<TPState> = {
         'Also correct, and memory-free: 8 elements × ~3 probes ≈ 24 probes in the worst case. But watch the searches: for x = 2 we hunt for 32, for x = 5 we hunt for 29, for x = 8 we hunt for 26… the wanted complement only ever moves LEFT as x moves right — yet every binary search forgets this and restarts blind from the middle, re-exploring territory the previous search already ruled out.',
       insight:
         'The partner we need drifts in ONE direction as x grows. So do not restart the search each time — keep a second pointer parked where the last search ended, and only ever walk it one way.',
+      demo: bsearchDemo,
     },
     {
       title: 'Two pointers — squeeze from both ends',
@@ -181,6 +185,7 @@ export const twoPointers: AlgorithmModule<TPState> = {
         'Nothing is wasted now: 2 + 28 = 30 < 34 evicts 2 from EVERY future pair, because 28 was its best possible partner. One comparison, one permanent elimination — for these 8 numbers the answer (11 + 23) arrives in just 4 comparisons instead of up to 28, with zero extra memory.',
       insight:
         'Each end-comparison is a verdict you can act on forever — which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
