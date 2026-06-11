@@ -145,6 +145,17 @@ export const slidingWindow: AlgorithmModule<SWState> = {
   tagline: 'Grow and shrink a window over the data so every element is touched at most twice.',
   category: 'Arrays & Strings',
   icon: '🪟',
+  problem: {
+    title: 'Longest Substring Without Repeating Characters',
+    statement:
+      'You are handed the string "abcbadcab" and asked: what is the longest stretch of consecutive characters in which no letter appears twice — and where is it? That exact question is what the animation below is solving, live.',
+    input: 'The 9-character string "abcbadcab".',
+    output: 'The longest duplicate-free substring — here "cbad" (indices 2–5), length 4.',
+    naive:
+      'Test every substring for repeats: "abcbadcab" has 45 substrings, and scanning each one for duplicates touches ~165 characters in total — for a 9-letter string. The window does the whole job in about 18 pointer moves, and at n = 100,000 that gap becomes billions of checks versus 200,000.',
+  },
+  aha:
+    'The moment R hits a repeated character, every window starting at or before its old copy is already poisoned — so L can leap forward past it and NEVER look back. Each of the 9 characters enters and leaves the window at most once, so ~18 pointer moves replace checking all 45 substrings.',
   intuition: [
     'Imagine reading a long banner through a stretchy picture frame you slide along the wall. You pull the right edge forward to take in one new letter at a time, and the moment the frame holds something it shouldn\'t — say, the same letter twice — you drag the left edge forward just far enough to fix it. You never lift the frame off the wall and you never slide either edge backwards.',
     'The key insight is that both edges only move forward, so every element enters the window once and leaves it at most once. The inner "shrink" loop looks nested, but its total cost across the WHOLE run is bounded by how far the left edge can travel — at most n steps. The invariant you maintain (here: no repeated character) is restored after every extension, which means the best answer is always one of the windows you actually held.',

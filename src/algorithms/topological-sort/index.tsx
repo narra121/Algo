@@ -65,7 +65,7 @@ function generateSteps(): Step<TopoState>[] {
 
   steps.push({
     state: snap(null, null),
-    description: `Count incoming arrows for every course: A and B have 0 pending prerequisites, C and F have 1, while D, E and G are blocked by 2 each. An in-degree is just "how many things must happen before me".`,
+    description: `Goal: line up all 7 courses so every prerequisite arrow points forward. Start by counting incoming arrows for every course: A and B have 0 pending prerequisites, C and F have 1, while D, E and G are blocked by 2 each. An in-degree is just "how many things must happen before me".`,
     codeLine: 0,
   })
 
@@ -113,7 +113,7 @@ function generateSteps(): Step<TopoState>[] {
 
   steps.push({
     state: snap(null, null, true),
-    description: `Queue empty and all ${order.length} of ${NODES.length} courses placed: ${order.join(' → ')}. Every arrow points forward in this list. Had we finished with fewer than 7, the leftovers would all be waiting on each other — a cycle, and no valid order exists.`,
+    description: `Queue empty and all ${order.length} of ${NODES.length} courses placed: ${order.join(' → ')}. Every arrow points forward in this list — and it took just ${order.length} dequeues + ${EDGES.length} edge deletions = ${order.length + EDGES.length} operations, versus checking up to 5,040 permutations by brute force. Had we finished with fewer than 7, the leftovers would all be waiting on each other — a cycle, and no valid order exists.`,
     codeLine: 8,
   })
 
@@ -224,6 +224,17 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
   tagline: 'Order tasks so every prerequisite comes first — repeatedly peel off whatever has nothing pending.',
   category: 'Graphs',
   icon: '🧭',
+  problem: {
+    title: 'Course Schedule — order 7 courses so every prerequisite comes first',
+    statement:
+      'A course catalog has 7 courses — Intro to CS, Calculus, Data Structures, Discrete Math, Algorithms, Databases, Capstone — linked by 8 prerequisite arrows (e.g. Intro to CS → Data Structures, Algorithms → Capstone). In what order can you take all 7 so that every arrow points forward — every prerequisite finished before the course that needs it? That exact question is what the animation below is solving, live.',
+    input: '7 courses (A–G) and 8 prerequisite arrows "u must come before v" forming a DAG.',
+    output: 'One valid ordering of all 7 — here, A → B → C → D → F → E → G — or proof that none exists (a cycle).',
+    naive:
+      'Try every possible ordering and check it: 7! = 5,040 permutations, each verified against all 8 arrows — about 40,320 checks for just 7 courses. At 20 courses that becomes 2.4 quintillion permutations. Kahn’s algorithm does this instance in 15 operations: 7 dequeues + 8 edge deletions.',
+  },
+  aha:
+    'A course with in-degree 0 has every prerequisite already behind it, so scheduling it next can NEVER break the order — and once placed it can be deleted forever, which may unblock its neighbors. Repeating that one always-safe move sorts all 7 courses in V + E = 15 operations instead of auditing 5,040 permutations.',
   intuition: [
     "Picture planning a college degree. The capstone needs Algorithms, Algorithms needs Data Structures and Discrete Math, and those need the intro courses. You can't enroll in everything at once — but each semester you CAN take any course whose prerequisites are all done. Take those, cross them off, and suddenly new courses become available. Repeat until the whole catalog is scheduled.",
     "The key insight is the in-degree counter: a node with in-degree 0 has no unmet dependency, so placing it next can never break an ordering — every arrow into it is already behind us. And once it's placed, it can be deleted from the graph, decrementing its neighbors' counters. The invariant is that the queue holds EXACTLY the nodes whose entire ancestry is already in the output. If the queue ever empties before all n nodes are placed, every remaining node is waiting on another remaining node — a cycle — and no valid order exists at all.",

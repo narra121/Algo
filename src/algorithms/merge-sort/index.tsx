@@ -25,7 +25,7 @@ function generateSteps(): Step<MSState>[] {
 
   steps.push({
     state: { arr: [...a], lo: -1, hi: -1, k: -1, rs: -1, depth: 0, phase: 'intro' },
-    description: `Eight unsorted values: [${a.join(', ')}]. Merge sort's promise: never sort a messy array directly — split it until every piece is trivially sorted, then zipping sorted pieces together is the easy part.`,
+    description: `The goal: sort the eight scrambled values [${a.join(', ')}] into ascending order. Merge sort's promise: never sort a messy array directly — split it until every piece is trivially sorted, then zipping sorted pieces together is the easy part.`,
     codeLine: 0,
   })
 
@@ -116,7 +116,7 @@ function generateSteps(): Step<MSState>[] {
 
   steps.push({
     state: { arr: [...a], lo: 0, hi: 7, k: 8, rs: -1, depth: 0, phase: 'sorted' },
-    description: `Done: [${a.join(', ')}]. Three levels of merging, and every level touched all 8 elements exactly once — that is the n·log n in action: log₂ 8 = 3 levels × 8 elements of linear merging per level.`,
+    description: `Done: [${a.join(', ')}] — all 8 values in ascending order. Three levels of merging, and every level touched all 8 elements exactly once: log₂ 8 = 3 levels × 8 elements = 24 placements, versus up to 28 pair-comparisons (and ~n²/2 growth) for a naive sort. That is n·log n in action.`,
     codeLine: -1,
   })
 
@@ -173,6 +173,17 @@ export const mergeSort: AlgorithmModule<MSState> = {
   tagline: 'Split until trivially sorted, then zip sorted halves together — guaranteed n log n.',
   category: 'Sorting',
   icon: '🪄',
+  problem: {
+    title: 'Sort an Array — put 8 scrambled numbers in ascending order',
+    statement:
+      'You are handed the scrambled array [38, 27, 43, 3, 9, 82, 10, 5] and asked: rearrange these eight numbers into ascending order, producing [3, 5, 9, 10, 27, 38, 43, 82] — with a running time you can guarantee no matter how badly scrambled the input is. That exact sort is what the animation below performs, live.',
+    input: 'An unsorted array of 8 numbers: [38, 27, 43, 3, 9, 82, 10, 5].',
+    output: 'The same 8 numbers in ascending order: [3, 5, 9, 10, 27, 38, 43, 82].',
+    naive:
+      'Bubble or selection sort: sweep the array over and over, comparing adjacent values — up to 28 pair-comparisons (8·7/2) for these 8 numbers, and ~n²/2 in general. At 8 elements that is survivable; at a million elements it is ~500 billion comparisons, while merge sort needs only ~20 million — a 25,000× difference from the same starting data.',
+  },
+  aha:
+    'Sorting chaos is hard, but merging two ALREADY-SORTED lists is almost free: the front of a sorted list is its minimum, so whichever front is smaller beats everything still waiting in BOTH lists and can be locked into its final position forever. Split until every piece is a single element — sorted by definition — and the whole job becomes log₂ n levels of these cheap zips: 8 × 3 = 24 placements here instead of n²/2 comparisons.',
   intuition: [
     'Imagine two librarians, each holding an alphabetized stack of index cards, combining their stacks into one. Each just looks at the top card of both stacks, places the alphabetically-earlier one face-down on the output pile, and repeats. Neither ever digs into the middle of a stack — the top card is always the next correct one. Merging sorted stacks is mindless; building a sorted stack from chaos is the hard part. Merge sort makes sure the librarians only ever see sorted stacks.',
     'The key insight is that one element is already sorted, and two sorted lists merge in linear time because the front of a sorted list is its minimum — whichever front is smaller beats everything remaining in BOTH lists, so it can be placed permanently without looking at anything else. Splitting in half repeatedly creates log n levels of these cheap merges, and every level processes the same n elements exactly once.',

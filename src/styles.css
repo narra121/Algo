@@ -400,6 +400,109 @@ button {
   gap: 18px;
 }
 
+/* ---------- problem card & aha banner ---------- */
+
+.problem-card {
+  margin-bottom: 18px;
+  border-left: 3px solid var(--amber);
+}
+
+.problem-card .ptitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 680;
+  margin-bottom: 8px;
+}
+
+.problem-card .pstatement {
+  color: var(--ink);
+  font-size: 16.5px;
+  margin: 0 0 18px;
+  max-width: 760px;
+}
+
+.pfacts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr;
+  gap: 12px;
+}
+
+@media (max-width: 980px) {
+  .pfacts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pfact {
+  background: rgba(10, 15, 34, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+
+.pfact .plabel {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sky);
+  margin-bottom: 6px;
+}
+
+.pfact.naive {
+  border-color: rgba(255, 107, 129, 0.3);
+}
+
+.pfact.naive .plabel {
+  color: var(--rose);
+}
+
+.aha-banner {
+  position: relative;
+  margin-bottom: 18px;
+  padding: 26px 30px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(94, 242, 184, 0.35);
+  background:
+    radial-gradient(600px 200px at 12% 0%, rgba(94, 242, 184, 0.14), transparent 70%),
+    var(--panel);
+  overflow: hidden;
+  animation: rise 0.6s both;
+}
+
+.aha-banner::before {
+  content: '💡';
+  position: absolute;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 54px;
+  opacity: 0.16;
+}
+
+.aha-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--mint);
+  margin-bottom: 10px;
+}
+
+.aha-text {
+  font-family: var(--font-display);
+  font-size: clamp(19px, 2.4vw, 26px);
+  font-weight: 620;
+  line-height: 1.4;
+  margin: 0;
+  max-width: 880px;
+  color: var(--ink);
+  text-shadow: 0 0 40px rgba(94, 242, 184, 0.15);
+}
+
 /* narration ticker */
 .narration {
   font-family: var(--font-mono);
@@ -423,6 +526,26 @@ button {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* word-by-word flow inside the narration */
+.narration .nw {
+  display: inline-block;
+  opacity: 0;
+  animation: wordin 0.22s both;
+}
+
+@keyframes wordin {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
   }
 }
 

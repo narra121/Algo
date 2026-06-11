@@ -31,6 +31,8 @@ function firstAttacker(queens: number[], row: number, col: number): [number, num
 function generateSteps(): Step<NQState>[] {
   const steps: Step<NQState>[] = []
   const queens: number[] = []
+  let squaresTried = 0
+  let undos = 0
 
   const snap = (over: Partial<NQState>): NQState => ({
     queens: [...queens],
@@ -52,12 +54,13 @@ function generateSteps(): Step<NQState>[] {
     if (row === N) {
       steps.push({
         state: snap({ solved: true, caption: `solved · queen columns = [${queens.join(', ')}]` }),
-        description: `Row ${N} reached — all ${N} queens stand at columns ${queens.join(', ')} with zero conflicts. Notice how much of the tree we never visited: every undo pruned an entire subtree of doomed boards.`,
+        description: `Row ${N} reached — all ${N} queens stand at columns ${queens.join(', ')} with zero conflicts. The whole search touched just ${squaresTried} squares and undid only ${undos} placements, while a brute force would have built all ${N ** N} complete one-queen-per-row boards (1,820 if queens could land anywhere) before checking a single one. Every undo pruned an entire subtree of doomed boards.`,
         codeLine: 1,
       })
       return true
     }
     for (let col = 0; col < N; col++) {
+      squaresTried++
       const attacker = firstAttacker(queens, row, col)
       if (attacker) {
         const [ar, ac] = attacker
@@ -80,6 +83,7 @@ function generateSteps(): Step<NQState>[] {
       })
       if (solve(row + 1)) return true
       queens.pop()
+      undos++
       const next =
         col + 1 < N
           ? `resume its scan at column ${col + 1}`
@@ -164,6 +168,18 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
   tagline: 'Commit to a choice, explore it fully, and undo it the moment it proves wrong.',
   category: 'Recursion & Backtracking',
   icon: '🌿',
+  problem: {
+    title: 'N-Queens — place 4 non-attacking queens on a 4×4 board',
+    statement:
+      'You are given an empty 4×4 chessboard and asked: can you place 4 queens on it so that no two attack each other — no shared row, column, or diagonal — and where exactly do they go? That exact question is what the animation below is solving, live, one square at a time.',
+    input: 'An empty 4×4 board and 4 queens to place.',
+    output:
+      'One valid arrangement — here, queens at columns [1, 3, 0, 2] of rows 0–3 (the board\'s only solution up to mirror symmetry).',
+    naive:
+      'Generate every complete board first, check it after: dropping 4 queens on any of the 16 squares gives C(16,4) = 1,820 boards, each needing up to 6 pair-checks — roughly 11,000 checks. Even the smarter "one queen per row" version still builds all 4⁴ = 256 finished boards before noticing most were doomed by their very first queen.',
+  },
+  aha:
+    'The instant two queens attack each other, every board you could build on top of that position is ALREADY dead — so one conflict check discards an entire subtree of futures without ever constructing them, and 4 queens fall into place after touching just 26 squares instead of grinding through 256 complete boards.',
   intuition: [
     'Imagine solving a hedge maze by always keeping one hand on the wall. At each fork you commit to a corridor and walk it to the end. Hit a dead end? You walk back to the most recent fork — undoing exactly the steps you took — and try the next corridor. You never redraw the whole map; you only ever revise your latest decision.',
     'The key insight is that a partial solution either already violates a constraint or it does not — and if it does, NO extension of it can ever succeed. So the instant a choice creates a conflict (a queen attacked, a parenthesis unbalanced, a sum overshot), you prune the entire subtree of futures built on it. Backtracking is depth-first search over the tree of partial solutions, where "undo the last choice" is what lets one shared, mutable board explore millions of boards.',

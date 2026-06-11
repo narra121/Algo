@@ -116,7 +116,7 @@ function generateSteps(): Step<BSState>[] {
 
   steps.push({
     state: snap(null, foundAt !== null ? 'equal' : null, foundAt),
-    description: `Recap: the search space shrank ${history.join(' → ')} → found. Doubling the array to ${ARR.length * 2} elements would cost just ONE more probe — that is what O(log n) feels like.`,
+    description: `Recap: ${probes} probes did what a linear scan needs up to ${ARR.length} looks for — the search space shrank ${history.join(' → ')} → found at index ${foundAt}. Doubling the array to ${ARR.length * 2} elements would cost just ONE more probe — that is what O(log n) feels like.`,
     codeLine: -1,
   })
   return steps
@@ -171,6 +171,17 @@ export const binarySearch: AlgorithmModule<BSState> = {
   tagline: 'Halve the search space with every question — find anything in a sorted world in log n.',
   category: 'Search',
   icon: '🎯',
+  problem: {
+    title: 'Classic lookup — find the index of 37 in a sorted array',
+    statement:
+      'You are handed the sorted array [3, 8, 12, 19, 23, 28, 37, 41, 56, 64, 72, 89] and asked one question: does 37 appear in it — and at what index? That exact hunt is what the animation below performs, live.',
+    input: 'A sorted array of 12 numbers, and the target value 37.',
+    output: 'The index where 37 lives — here, index 6, reached after only 3 probes.',
+    naive:
+      'Scan left to right: 3? no. 8? no. 12? no… You would inspect 7 elements one by one just to reach 37, and all 12 if the target were absent. Scale that up and a million-element array costs up to a million looks — all while ignoring the gift that someone already sorted the data.',
+  },
+  aha:
+    'Because the array is sorted, the middle element answers for its entire half: when the probe finds 28 < 37, every one of the 6 values to its left is even smaller — so all of them are thrown away forever on a single comparison. Halving like that pins 37 down in 3 probes instead of 12, and would find anything in a BILLION elements in about 30.',
   intuition: [
     'Think of guessing a number between 1 and 100 when every guess earns a "higher" or "lower". Nobody guesses 1, 2, 3… — you guess 50, then 75 or 25, then keep splitting. Seven guesses always suffice, because each answer throws away half of everything you haven\'t tried. Looking up "marmalade" in a dictionary works the same way: open to the middle, see "n", and never touch the back half again.',
     'The key insight is the invariant: at every moment, IF the target exists, it lies between LO and HI — and sortedness makes the middle element speak for its whole half. When a[mid] is too small, everything left of mid is even smaller, so all of it is provably wrong at once. One three-way comparison (smaller / equal / bigger) converts a single peek into the elimination of half the remaining candidates, and nothing eliminated ever needs a second look.',

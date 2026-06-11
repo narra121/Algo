@@ -28,16 +28,18 @@ with sync_playwright() as p:
         page.wait_for_timeout(150)
         h1 = page.locator(".algo-head h1").inner_text()
         rows = page.locator(".problems tbody tr").count()
+        has_problem = page.locator(".problem-card .pstatement").count() == 1
+        aha_len = len(page.locator(".aha-text").inner_text()) if page.locator(".aha-text").count() else 0
         # step through a few states to exercise the visualizer
         for _ in range(5):
             nxt = page.locator("button", has_text="Next")
             if nxt.is_enabled():
                 nxt.click()
         narration = page.locator(".narration").inner_text()
-        ok = rows >= 10 and len(narration) > 0
-        print(f"{aid:22s} h1={h1!r:42s} problems={rows:2d} {'OK' if ok else 'FAIL'}")
+        ok = rows >= 10 and len(narration) > 0 and has_problem and aha_len > 40
+        print(f"{aid:22s} problems={rows:2d} problemCard={has_problem} ahaChars={aha_len:3d} {'OK' if ok else 'FAIL'}")
         if not ok:
-            errors.append(f"{aid}: rows={rows}")
+            errors.append(f"{aid}: rows={rows} problemCard={has_problem} ahaChars={aha_len}")
 
     # screenshots of two representative pages
     for aid in ["bfs", "dijkstra"]:

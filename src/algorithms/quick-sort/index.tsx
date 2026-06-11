@@ -35,7 +35,7 @@ function generateSteps(): Step<QSState>[] {
   }
 
   push(
-    `Quick sort on [${ARR.join(', ')}]. The plan: pick a pivot, sweep everything smaller to its left and everything bigger to its right — the pivot drops into its final sorted slot, then we repeat on each half.`,
+    `Goal: sort [${ARR.join(', ')}] into ascending order — [8, 10, 13, 14, 25, 29, 31, 37] — in place. The plan: pick a pivot, sweep everything smaller to its left and everything bigger to its right — the pivot drops into its final sorted slot, then we repeat on each half.`,
     0,
     { lo: 0, hi: ARR.length - 1, pivotIdx: -1, i: -1, j: -1, swapped: null },
   )
@@ -115,7 +115,7 @@ function generateSteps(): Step<QSState>[] {
   sort(0, ARR.length - 1, '')
 
   push(
-    `Every pivot dropped into its slot and the one-element ranges filled the gaps: [${a.join(', ')}]. Fully sorted — no merge step needed, the partitioning alone did all the work.`,
+    `Every pivot dropped into its slot and the one-element ranges filled the gaps: [${a.join(', ')}]. Fully sorted in 21 comparisons across 5 partition passes — selection sort would have ground through all 28 on these same 8 numbers, and at a million items that gap explodes to ~20 million vs ~500 billion. No merge step needed: the partitioning alone did all the work.`,
     -1,
     { lo: -1, hi: -1, pivotIdx: -1, i: -1, j: -1, swapped: null },
   )
@@ -170,6 +170,17 @@ export const quickSort: AlgorithmModule<QSState> = {
   tagline: 'Pick a pivot, throw smaller left and bigger right — the pivot lands in its final home.',
   category: 'Sorting',
   icon: '⚡',
+  problem: {
+    title: 'Sort the array — put 8 jumbled numbers in ascending order',
+    statement:
+      'You are handed the jumbled array [29, 10, 14, 37, 13, 25, 8, 31] and asked to rearrange it, in place, into ascending order: [8, 10, 13, 14, 25, 29, 31, 37]. That exact rearrangement — these eight numbers, no extra array — is what the animation below performs, live.',
+    input: 'An unsorted array of 8 numbers: [29, 10, 14, 37, 13, 25, 8, 31].',
+    output: 'The same 8 numbers in ascending order: [8, 10, 13, 14, 25, 29, 31, 37].',
+    naive:
+      'Selection sort: rescan everything unsorted for the minimum, again and again — 7 + 6 + 5 + … + 1 = 28 comparisons for these 8 numbers, every single time, because each pass learns nothing that helps the next. At n²/2 that is ~500 billion comparisons for a million items. Quick sort finishes this very array in 21 comparisons, and ~20 million at a million items.',
+  },
+  aha:
+    'One sweep does not "roughly place" the pivot — it provably locks it into its FINAL sorted slot, because everything smaller now sits to its left and everything bigger to its right, so no element ever needs to cross that boundary again. That one irreversible fact splits the problem in two for good each pass: about log n rounds of n cheap comparisons instead of n² of endless reshuffling.',
   intuition: [
     'Picture a teacher lining students up by height. She grabs one student — the pivot — and shouts: "shorter than them, stand to the left; taller, to the right." She has not sorted anyone yet, but that one student is now standing EXACTLY where they will be in the final line. She then repeats the trick inside the left group and inside the right group, and the line assembles itself.',
     'The key insight is that one partition pass buys you a permanent fact: the pivot is in its final position, and no element ever needs to cross it again. The Lomuto scan maintains a tidy invariant — everything in [lo, i) is smaller than the pivot, everything in [i, j) is at least as big — so when the scan finishes, one last swap drops the pivot at i. Unlike merge sort, all the work happens BEFORE the recursive calls; there is nothing to combine afterwards.',

@@ -100,6 +100,17 @@ export const twoPointers: AlgorithmModule<TPState> = {
   tagline: 'Squeeze a sorted array from both ends, eliminating one candidate per comparison.',
   category: 'Arrays & Strings',
   icon: '🤏',
+  problem: {
+    title: 'Two Sum II — find the pair with a given sum',
+    statement:
+      'You are handed the sorted array [2, 5, 8, 11, 15, 19, 23, 28] and asked: do two of these numbers add up to exactly 34 — and which two? That exact question is what the animation below is solving, live.',
+    input: 'A sorted array of 8 numbers, and a target sum of 34.',
+    output: 'The two numbers (and their positions) that sum to 34 — here, 11 + 23.',
+    naive:
+      'Check every possible pair: 28 pair-checks for just 8 numbers, and ~n²/2 for big arrays. Worse — it completely ignores that someone already sorted the array for us.',
+  },
+  aha:
+    'In a sorted array, one check of the two ends is a verdict you can act on forever: if the sum is too small, the smallest number is too small for EVERY partner — so throw it away. Each check permanently kills one number, so n numbers need only n checks instead of n².',
   intuition: [
     'Imagine two people standing at opposite ends of a sorted bookshelf, looking for two books whose page counts add to exactly 30. If the current pair totals too few pages, the person at the thin end steps inward; too many, the thick-end person steps inward. They never need to backtrack.',
     'The key insight is monotonicity: because the array is sorted, when the sum is too small the leftmost element can never form the answer with ANYTHING (its best partner — the largest remaining — was just tried). So it can be discarded forever. Each comparison kills one element, so n elements need at most n comparisons.',

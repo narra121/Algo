@@ -25,7 +25,7 @@ function generateSteps(): Step<DPState>[] {
 
   steps.push({
     state: { values: [...VALUES], dp: [...dp], house: -1, compare: [], justWrote: -1, finished: false },
-    description: `Seven houses hold cash [${VALUES.join(', ')}], and robbing two neighbors trips the alarm. Brute force would weigh every legal subset — instead we build a table where dp[i] = the best haul using only houses 0…i. Each entry gets computed exactly once.`,
+    description: `Goal: steal the MAXIMUM total from seven houses holding [${VALUES.join(', ')}], where robbing two neighbors trips the alarm. Brute force would weigh all 2^${VALUES.length} = ${2 ** VALUES.length} rob/skip subsets — instead we build a table where dp[i] = the best haul using only houses 0…i. Each entry gets computed exactly once.`,
     codeLine: 0,
   })
 
@@ -144,6 +144,17 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
   tagline: 'Solve every subproblem once, write the answer down, and let small answers build big ones.',
   category: 'Dynamic Programming',
   icon: '🧩',
+  problem: {
+    title: 'House Robber — maximum loot with no two adjacent houses',
+    statement:
+      'A street of seven houses holds cash [2, 7, 9, 3, 1, 8, 4]. Robbing any two adjacent houses trips the alarm, so the question is: what is the LARGEST total you can steal without ever hitting two neighbors? That exact question, on these exact seven numbers, is what the animation below solves live.',
+    input: 'A row of 7 cash amounts: [2, 7, 9, 3, 1, 8, 4], plus the rule that no two adjacent houses may both be robbed.',
+    output: 'The maximum legal haul — here 19, by robbing houses 0, 2, and 5 (2 + 9 + 8).',
+    naive:
+      'Enumerate every rob/skip combination: 2^7 = 128 subsets for just these 7 houses, then discard the illegal ones and total the rest. A 40-house street would already need over a trillion — and almost all that work re-answers the same question ("best haul up to house i") again and again.',
+  },
+  aha:
+    'The best haul up to house i depends on nothing but two numbers already in the table — dp[i−1] and dp[i−2] — so the millions of ways those hauls were achieved can be thrown away forever, collapsing 2^7 = 128 rob/skip futures into just 7 one-line table fills.',
   intuition: [
     'Imagine a burglar walking down a street with a notebook. At every house he jots one number: "best haul possible using the street up to here." When he reaches house 50 he never re-plans houses 1–49 from scratch — he just checks two notebook lines, does one addition and one comparison, and writes the next line. The notebook is the dp table, and it turns an overwhelming plan into a stroll.',
     'The key insight is that big problems often repeat the same small questions over and over. A naive recursion for house i asks about i−1 and i−2, which each ask about their predecessors — the same subproblems explode exponentially down the call tree. But the ANSWER to "best haul up to house i" is a single number that never changes once known (optimal substructure). Cache it the first time, and the exponential tree collapses into one linear pass: each entry is computed once, from a constant number of earlier entries.',

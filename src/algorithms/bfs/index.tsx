@@ -52,7 +52,7 @@ function generateSteps(): Step<BFSState>[] {
   steps.push({
     state: { dist: copyDist(dist), frontier: [...frontier], wave: 0, queueSize: 1, path: [], phase: 'explore' },
     description:
-      'Start at S with distance 0 — it is the only cell in the queue. BFS will pour outward like water: every cell in wave k is exactly k moves from S, no exceptions.',
+      'Goal: find the FEWEST moves from S (top-left) to T (bottom-right) through this 6×8 maze, stepping up/down/left/right around the walls. Start at S with distance 0 — it is the only cell in the queue. BFS will pour outward like water: every cell in wave k is exactly k moves from S, no exceptions.',
     codeLine: 0,
   })
 
@@ -128,7 +128,7 @@ function generateSteps(): Step<BFSState>[] {
 
   steps.push({
     state: { dist: copyDist(dist), frontier: [], wave, queueSize: 0, path: [...path], phase: 'done' },
-    description: `Done: shortest path is ${wave} moves. BFS examined each open cell at most once and still PROVED minimality — because waves leave in strict distance order, nothing at distance ${wave} can be dequeued before everything at distance ${wave - 1}.`,
+    description: `Done: shortest path is ${wave} moves — found and PROVED minimal in just 33 cell visits (each of the 33 open cells touched exactly once), versus the 165 backtracking steps a try-every-route search burns on this same maze. The proof is free: waves leave in strict distance order, so nothing at distance ${wave} can be dequeued before everything at distance ${wave - 1}.`,
     codeLine: 7,
   })
 
@@ -205,6 +205,17 @@ export const bfs: AlgorithmModule<BFSState> = {
   tagline: 'Explore in expanding waves — the first time you reach something is the shortest way there.',
   category: 'Graphs',
   icon: '🌊',
+  problem: {
+    title: 'Shortest path in a maze — fewest moves from S to T',
+    statement:
+      'You are dropped at S in the top-left corner of a 6×8 maze where 15 of the 48 cells are walls. Moving one cell at a time (up, down, left, or right — never through a wall), what is the FEWEST moves needed to reach T in the bottom-right corner, and which route achieves it? That exact question is what the animation below is solving, live.',
+    input: 'A 6×8 grid with 15 wall cells; start S at (0,0), target T at (5,7); every move costs exactly 1.',
+    output: 'The minimum number of moves — here, 12 — plus one concrete 12-move route from S to T.',
+    naive:
+      'Try every route and keep the shortest: this tiny maze hides 6 distinct wall-free routes (12, 16, 18, 20, 24, and 26 moves long), and exhaustive backtracking burns 165 steps wandering into dead ends to enumerate them all — only after seeing every last route can it swear nothing beats 12. And the route count explodes exponentially as mazes grow.',
+  },
+  aha:
+    'Because BFS finishes EVERY cell at distance k before touching any cell at distance k+1, the first time it reaches a cell is provably the shortest way there — so each cell can be sealed forever on first touch. One visit per cell (33 here) buys the minimality guarantee that brute force needs all 165 backtracking steps to earn.',
   intuition: [
     'Drop a pebble into a still pond and watch the ripple spread: it reaches everything one meter away before anything two meters away, everything two meters away before anything at three. BFS is that ripple running through a graph — it visits every node one edge away, then every node two edges away, and so on, never skipping ahead.',
     'The key invariant is that the queue always holds nodes in non-decreasing distance order. When a node comes off the queue at distance k, everything at distance k − 1 has already been processed — so the FIRST time you ever touch a node, you have provably arrived by a shortest route. That is why BFS can mark a node visited immediately and never reconsider it: any later arrival would only be longer.',

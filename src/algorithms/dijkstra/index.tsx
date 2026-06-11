@@ -76,7 +76,7 @@ function generateSteps(): Step<DijkstraState>[] {
 
   steps.push({
     state: snap({}),
-    description: `Start at ${SOURCE}: its distance is 0 (we are already there). Every other node gets ∞ — we have no idea how to reach them yet. The priority queue holds just (${SOURCE}, 0).`,
+    description: `Goal: find the cheapest path cost from ${SOURCE} to ALL ${NODES.length} nodes of this weighted graph. Start at ${SOURCE}: its distance is 0 (we are already there). Every other node gets ∞ — we have no idea how to reach them yet. The priority queue holds just (${SOURCE}, 0).`,
     codeLine: 0,
   })
 
@@ -136,7 +136,7 @@ function generateSteps(): Step<DijkstraState>[] {
 
   steps.push({
     state: snap({ done: true }),
-    description: `All ${NODES.length} nodes settled. Final shortest distances from ${SOURCE}: ${NODES.map((n) => `${n}=${dist[n]}`).join(', ')}. Each node was locked exactly once, in increasing order of distance — like ripples spreading outward.`,
+    description: `All ${NODES.length} nodes settled. Final shortest distances from ${SOURCE}: ${NODES.map((n) => `${n}=${dist[n]}`).join(', ')}. Total work: ${NODES.length} pops and ${EDGES.length} edge relaxations — instead of enumerating all 42 simple paths from ${SOURCE} (13 to F alone). Each node was locked exactly once, in increasing order of distance — like ripples spreading outward.`,
     codeLine: 7,
   })
 
@@ -240,6 +240,17 @@ export const dijkstra: AlgorithmModule<DijkstraState> = {
   tagline: 'Greedily lock in the closest unsettled place — once settled, no shorter route can ever exist.',
   category: 'Graphs',
   icon: '🗺️',
+  problem: {
+    title: 'Single-source shortest paths — cheapest routes from A to everywhere',
+    statement:
+      'You are given a map of 6 towns (A–F) joined by 9 two-way roads with tolls: A–B costs 4, A–C costs 2, B–C costs 1, B–D costs 5, C–D costs 8, C–E costs 5, D–E costs 2, D–F costs 6, E–F costs 3. Starting from town A, what is the cheapest total toll to reach EACH of the other five towns? That exact question is what the animation below is solving, live.',
+    input: 'The 6-node weighted graph above (9 undirected edges), and the source node A.',
+    output: 'The cheapest cost from A to every node — here A=0, B=3, C=2, D=8, E=7, F=10.',
+    naive:
+      'Enumerate every simple path out of A and keep the cheapest per destination: even this tiny graph hides 42 such paths — 13 different routes to F alone — and the count explodes factorially as the map grows. Dijkstra answers the same question with just 6 pops and 9 edge relaxations.',
+  },
+  aha:
+    'With no negative tolls, the closest unsettled node can never be reached more cheaply — any other route would first detour through somewhere at least as far and then add more — so the first time a node is the closest, its distance is provably final and it can be locked forever. That one lock per node is why 6 pops and 9 edge checks beat searching all 42 paths.',
   intuition: [
     'Imagine pouring water onto your home city on a road map where every road is a channel and its length is how long water takes to flow through it. The flood front reaches the nearest town first, then the next nearest, and so on. The moment water first touches a town, you KNOW the fastest route there — water that arrives later, by definition, took longer. Dijkstra is that flood, simulated one town at a time.',
     'The invariant: when you pop the unsettled node with the smallest tentative distance, that distance is final. Why? Any alternative path to it must leave the settled region through some other unsettled node — which is already at least as far away — and then add edges with non-negative weight. It can only get worse. This is exactly why negative edge weights break Dijkstra: a "worse-for-now" path could later get a discount, invalidating the lock.',

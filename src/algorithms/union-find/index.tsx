@@ -34,7 +34,7 @@ function generateSteps(): Step<UFState>[] {
 
   steps.push({
     state: snap([], []),
-    description: `Eight nodes, eight tiny kingdoms. Every node starts as its own boss: parent[i] = i, rank 0. Component count = ${components}. Unions will arrive one at a time — we never see the whole graph up front.`,
+    description: `The mission: 7 unions will arrive one at a time — (0,1) (2,3) (4,5) (6,7) (1,3) (5,7) (3,7) — and we must keep a live count of connected components, plus answer "are 0 and 4 connected?" mid-stream. Eight nodes, eight tiny kingdoms to start: parent[i] = i, rank 0, component count = ${components}. We never see the whole graph up front.`,
     codeLine: 0,
   })
 
@@ -154,7 +154,7 @@ function generateSteps(): Step<UFState>[] {
   })
   steps.push({
     state: snap([], []),
-    description: `Done: 7 unions took us from 8 components to ${components}. Notice the forest stayed almost flat — rank held height to at most 3, and compression keeps shaving it. Each operation costs amortized α(n): effectively constant.`,
+    description: `Done: 7 unions took us from 8 components to ${components}, and the entire run — every find, every merge, the mid-stream query — cost about a dozen pointer hops. The naive relabel-after-every-union approach would have burned ~56 label rewrites on these same 8 nodes. Rank held the forest's height to 3 and compression keeps shaving it, so each operation costs amortized α(n): effectively constant, forever.`,
     codeLine: 11,
   })
 
@@ -242,6 +242,19 @@ export const unionFind: AlgorithmModule<UFState> = {
   tagline: 'Answer "are these two connected?" in near-constant time, even as new edges keep arriving.',
   category: 'Graphs',
   icon: '🤝',
+  problem: {
+    title: 'Dynamic Connectivity — count the components as unions stream in',
+    statement:
+      'Eight nodes, 0 through 7, start completely disconnected. Union operations arrive one at a time — (0,1), (2,3), (4,5), (6,7), (1,3), (5,7) — and after those six you must answer: are 0 and 4 connected right now? Then one last union(3,7) lands. At every moment you must know how many connected components remain. That exact stream is what the animation below is solving, live.',
+    input:
+      '8 isolated nodes and a stream of 7 unions: (0,1) (2,3) (4,5) (6,7) (1,3) (5,7) (3,7), with the query "0 connected to 4?" arriving after the sixth.',
+    output:
+      'The live component count at each step (8 → 7 → 6 → 5 → 4 → 3 → 2 → 1), and the query answer: after six unions, 0 and 4 are NOT connected — one union later, they are.',
+    naive:
+      'Keep a component label on every node and, after each union, rescan and relabel the merged group: up to 8 label rewrites × 7 unions = ~56 writes for this tiny instance — or re-run a full BFS per query, touching all 8 nodes and every edge each time. With a million nodes and streaming edges that snowballs to O(n) work per union, O(n·m) total, redoing from scratch what the last answer already knew.',
+  },
+  aha:
+    'Because every component is a tree that names one root as its spokesperson, merging two groups never touches the members — repoint one root at the other and every node beneath it switches allegiance in a single pointer write; so "connected?" is never a graph search, just two short walks to a root, and with rank + compression those walks stay effectively one hop forever.',
   intuition: [
     'Imagine clubs merging at a school. Each member remembers just one person — whoever recruited them — and only the founder remembers no one. To check whether two students are in the same club, each follows their recruiter chain up to a founder and you compare founders. When two clubs merge, nobody re-registers: one founder simply starts reporting to the other, and instantly every member of both clubs shares a root.',
     'The invariant is that every component is a tree whose root is its unique representative — so "connected?" reduces to "same root?". Two tricks keep root-finding cheap. Union by rank never lets a tall tree hide under a short one, and only grows rank on exact ties, so a rank-k root must command at least 2^k nodes. Path compression makes every find() rewire the nodes it visits to point nearer the root — reads literally repair the structure while answering the query.',

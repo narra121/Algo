@@ -42,7 +42,7 @@ function generateSteps(): Step<HeapState>[] {
 
   steps.push({
     state: snap(0, heap, [], false, false),
-    description: `The stream will deliver ${STREAM.join(', ')} one at a time. We keep only the ${K} largest values seen so far — in a MIN-heap, so the weakest of those ${K} (the ${K}rd largest overall) is always sitting right at the root, ready to be read or evicted in O(1).`,
+    description: `The question: as ${STREAM.join(', ')} arrive one at a time, what is the ${K}rd largest value seen so far — at every moment? Strategy: keep only the ${K} largest values in a MIN-heap, so the weakest of those ${K} (which IS the ${K}rd largest overall) is always sitting right at the root, ready to be read or evicted in O(1).`,
     codeLine: 0,
   })
 
@@ -153,7 +153,7 @@ function generateSteps(): Step<HeapState>[] {
 
   steps.push({
     state: snap(STREAM.length, heap, [0], false, true),
-    description: `Stream exhausted. The heap kept {${[...heap].sort((a, b) => b - a).join(', ')}} — the ${K} largest of all ${STREAM.length} items — and its root ${heap[0]} is the ${K}rd largest. Each arrival cost at most one sift of height log k; we never sorted anything.`,
+    description: `Stream exhausted — the answer is ${heap[0]}, the ${K}rd largest of all ${STREAM.length} items. The heap kept only {${[...heap].sort((a, b) => b - a).join(', ')}}: ${K} slots of memory instead of ${STREAM.length}, two arrivals (2 and 7) dismissed with a single comparison each, and no repair ever walked more than log₂ ${K} ≈ 2 levels — while the naive plan would have re-sorted a growing list after every one of the ${STREAM.length} arrivals (36 values shuffled) just to read off one number.`,
     codeLine: 9,
   })
 
@@ -240,6 +240,17 @@ export const heap: AlgorithmModule<HeapState> = {
   tagline: 'A self-organizing pile where the most important item always floats to the top.',
   category: 'Trees & Heaps',
   icon: '⛰️',
+  problem: {
+    title: 'Kth Largest Element in a Stream — k = 3',
+    statement:
+      'Numbers arrive one at a time: 3, 1, 5, 12, 2, 11, 9, 7. After EVERY arrival you must be able to answer instantly: what is the 3rd largest value seen so far? By the final arrival the answer is 9, because the three largest are 12, 11, and 9. That exact question is what the animation below is solving, one arrival at a time.',
+    input: 'A stream of 8 numbers — 3, 1, 5, 12, 2, 11, 9, 7 — and k = 3.',
+    output: 'The 3rd largest value seen so far, after every arrival. Final answer: 9 (the kept top three are 12, 11, 9).',
+    naive:
+      'Store every number ever seen and re-sort the whole list after each arrival: for this tiny stream that is 8 sorts over lists of size 1, 2, …, 8 — 36 values shuffled to extract one number — and all 8 values held in memory forever. For a million-item stream that becomes a million stored numbers and a full re-sort per tick, when only 3 of them ever mattered.',
+  },
+  aha:
+    'You never need the top 3 in order — you only need their WEAKEST member, and a min-heap pins exactly that value to its root: any arrival that cannot beat the root is provably outside the top 3 and can be thrown away forever after a single comparison, so a stream of any length needs just 3 slots of memory and at most log₂ 3 swaps per arrival instead of storing and sorting everything.',
   intuition: [
     'Picture a tiny VIP lounge with exactly 3 seats and a bouncer at the door. The bouncer does not memorize everyone inside — he only remembers the LEAST impressive guest currently seated. When someone new shows up, one glance settles it: less impressive than that weakest guest? Turned away. More impressive? The weakest guest is escorted out and the newcomer takes a seat, after which the bouncer quickly re-checks who the new weakest guest is.',
     "The key insight is the heap invariant: every parent is ≤ its children (in a min-heap), so the global minimum is always at the root — no searching required. The invariant is deliberately LAZY: it says nothing about the order of siblings, which is exactly why it is so cheap to maintain. Insert at the bottom and sift up, or replace the root and sift down — either repair walks one root-to-leaf path, just O(log n) swaps, instead of re-sorting everything. For top-k specifically, a min-heap of size k makes the root the admission threshold: beat the root or you provably cannot be in the top k.",

@@ -10,6 +10,7 @@ export interface StepPlayer<S> {
   atStart: boolean
   atEnd: boolean
   toggle: () => void
+  play: () => void
   next: () => void
   prev: () => void
   reset: () => void
@@ -53,6 +54,7 @@ export function useStepPlayer<S>(steps: Step<S>[]): StepPlayer<S> {
     (i: number) => setIndex(Math.max(0, Math.min(i, total - 1))),
     [total],
   )
+  const play = useCallback(() => setPlaying(true), [])
   const toggle = useCallback(() => {
     setPlaying(p => {
       if (!p && atEnd) {
@@ -73,12 +75,13 @@ export function useStepPlayer<S>(steps: Step<S>[]): StepPlayer<S> {
       atStart,
       atEnd,
       toggle,
+      play,
       next,
       prev,
       reset,
       goto,
       setSpeed,
     }),
-    [steps, index, total, playing, speed, atStart, atEnd, toggle, next, prev, reset, goto],
+    [steps, index, total, playing, speed, atStart, atEnd, toggle, play, next, prev, reset, goto],
   )
 }

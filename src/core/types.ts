@@ -26,6 +26,20 @@ export interface Complexity {
   explanation: string
 }
 
+/** The concrete problem the animated example is solving — shown BEFORE the visualization. */
+export interface ProblemSetup {
+  /** Famous name of the worked example, e.g. "Two Sum II — find a pair with a given sum". */
+  title: string
+  /** The exact question being answered, using the same concrete data the animation uses. */
+  statement: string
+  /** What we are given, with the real values. */
+  input: string
+  /** What we must produce, with the real answer when known. */
+  output: string
+  /** The obvious brute-force approach and its cost, with real numbers for THIS input. */
+  naive: string
+}
+
 export interface AlgorithmModule<S = any> {
   /** URL-safe id, matches the folder name, e.g. "two-pointers". */
   id: string
@@ -36,6 +50,13 @@ export interface AlgorithmModule<S = any> {
   category: string
   /** Single emoji used as the card glyph. */
   icon: string
+  /** The concrete worked problem — what the animation is actually solving. */
+  problem: ProblemSetup
+  /**
+   * THE one-sentence insight that makes the solution click — the "ahh, so THAT's
+   * why this works" moment. Displayed large before the animation.
+   */
+  aha: string
   /** Intuition paragraphs. First paragraph should be a real-world analogy. */
   intuition: string[]
   pseudocode: string[]
