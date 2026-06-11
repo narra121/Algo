@@ -1,10 +1,8 @@
 import type { AlgorithmModule, Step } from '../../core/types'
 import { bsearchDemo, hashDemo, naiveDemo } from './demos'
+import { ARR, TARGET } from './data'
 
 /* Canonical example: Two Sum II — find two numbers in a sorted array summing to a target. */
-
-export const ARR = [2, 5, 8, 11, 15, 19, 23, 28]
-export const TARGET = 34
 
 interface TPState {
   arr: number[]

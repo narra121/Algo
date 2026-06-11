@@ -1,6 +1,6 @@
 import type { AttemptDemo, Step } from '../../core/types'
 import { Cells, Legend, VizCaption } from '../../components/vizPrimitives'
-import { ARR, TARGET } from './index'
+import { ARR, TARGET } from './data'
 
 /* ---------- demo 1: brute force — check every pair ---------- */
 
@@ -15,7 +15,7 @@ interface BFState {
 function bruteSteps(): Step<BFState>[] {
   const steps: Step<BFState>[] = []
   steps.push({
-    state: { i: 0, j: 1, sum: null, checks: 0, hit: false },
+    state: { i: -1, j: -1, sum: null, checks: 0, hit: false },
     description: `Check every pair until one sums to ${TARGET}. With ${ARR.length} numbers that is up to ${(ARR.length * (ARR.length - 1)) / 2} pair-checks. Start: pair up the first two.`,
     codeLine: 0,
   })
@@ -78,11 +78,11 @@ function hashSteps(): Step<HSState>[] {
     description: `One pass, no re-scanning: for each number x ask "have I already seen ${TARGET} − x?". The hash set starts empty.`,
     codeLine: 0,
   })
-  const seen: number[] = []
+  const seen = new Set<number>()
   for (let idx = 0; idx < ARR.length; idx++) {
     const x = ARR[idx]
     const want = TARGET - x
-    if (seen.includes(want)) {
+    if (seen.has(want)) {
       steps.push({
         state: { idx, seen: [...seen], want, found: true },
         description: `At ${x}: is ${TARGET} − ${x} = ${want} in the set? YES — ${want} + ${x} = ${TARGET}, found in ${idx + 1} steps. (A different valid pair than 11 + 23 — the set answers with whichever partner it met first.) Cost: the set itself, O(n) extra memory — and the sortedness was never used.`,
@@ -92,10 +92,10 @@ function hashSteps(): Step<HSState>[] {
     }
     steps.push({
       state: { idx, seen: [...seen], want, found: false },
-      description: `At ${x}: is ${TARGET} − ${x} = ${want} in the set {${seen.join(', ')}}? No — remember ${x} and move on.`,
+      description: `At ${x}: is ${TARGET} − ${x} = ${want} in the set {${[...seen].join(', ')}}? No — remember ${x} and move on.`,
       codeLine: 3,
     })
-    seen.push(x)
+    seen.add(x)
   }
   return steps
 }
