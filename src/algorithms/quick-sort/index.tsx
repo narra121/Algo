@@ -1,8 +1,10 @@
 import type { AlgorithmModule, Step } from '../../core/types'
+import { naiveDemo, mergeDemo, newListsDemo } from './demos'
+import { ARR as _ARR } from './data'
 
 /* Canonical example: sort [29, 10, 14, 37, 13, 25, 8, 31] with Lomuto partition (last element pivot). */
 
-const ARR = [29, 10, 14, 37, 13, 25, 8, 31]
+const ARR = _ARR
 
 interface QSState {
   arr: number[]
@@ -190,6 +192,7 @@ export const quickSort: AlgorithmModule<QSState> = {
       space: 'O(1)',
       issues:
         'Each pass scans nearly the whole remainder, finds one minimum, and then FORGETS every other comparison it just made — pass two re-learns facts pass one already knew. The cost is n²/2 no matter what: ~500 billion comparisons for a million items. Quick sort\'s partition pass spends its n comparisons buying something permanent — a pivot locked in its final slot and the problem cut in two — finishing this very array in 21 comparisons and ~20 million at a million items.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -213,6 +216,7 @@ export const quickSort: AlgorithmModule<QSState> = {
         'It genuinely works — on these 8 numbers merge sort spends just 17 comparisons, even fewer than quick sort\'s 21. The catch is the merge: interleaving the sorted halves [10, 14, 29, 37] and [8, 13, 25, 31] needs somewhere to write the combined order, and that somewhere is a second 8-slot array. The task said IN PLACE — at a million items you are buying a million-element scratch buffer just to recombine work you already did.',
       insight:
         'Divide and conquer is the right shape — but merge sort does all its real work AFTER the recursion, in a combine step that forces the scratch array. Flip it: do the work BEFORE splitting, so the halves never need recombining.',
+      demo: mergeDemo,
     },
     {
       title: 'Partition by value into two new lists',
@@ -233,6 +237,7 @@ export const quickSort: AlgorithmModule<QSState> = {
         'Correct, and the merge really is gone: pivot 31 splits the rest into smalls [29, 10, 14, 13, 25, 8] and bigs [37], and the final concatenation costs nothing. But look at the memory: all 7 elements just got COPIED into brand-new lists, and every recursion level copies its whole range again — the same O(n) scratch bill merge sort paid, just moved from the merge to the split. At a million items the very first partition already allocates a fresh million elements.',
       insight:
         'Watch what each comparison actually decides: "left of the pivot or right of it" — a two-zone verdict. Two zones inside ONE array need no new lists, just a boundary index and a swap whenever an element is on the wrong side.',
+      demo: newListsDemo,
     },
     {
       title: 'Partition in place — quick sort',
@@ -240,12 +245,14 @@ export const quickSort: AlgorithmModule<QSState> = {
         'Keep the boundary inside the array itself: everything left of index i is the small zone. Sweep the range once — each time the scanner finds an element smaller than the pivot, swap it across the boundary and grow the zone. One last swap drops the pivot at the boundary.',
       pseudocode: [
         'quickSort(a, lo, hi):',
-        '    if lo ≥ hi: return',
+        '    if lo ≥ hi: range is trivially sorted; return',
         '    pivot ← a[hi];  i ← lo',
         '    for j ← lo to hi − 1:',
-        '        if a[j] < pivot: swap a[i], a[j];  i ← i + 1',
+        '        if a[j] < pivot:',
+        '            swap a[i], a[j];  i ← i + 1',
         '    swap a[i], a[hi]        // pivot lands at i, forever',
-        '    quickSort(a, lo, i − 1);  quickSort(a, i + 1, hi)',
+        '    quickSort(a, lo, i − 1)',
+        '    quickSort(a, i + 1, hi)',
       ],
       time: 'O(n log n) average, O(n²) worst',
       space: 'O(log n) average (recursion stack)',
@@ -254,6 +261,7 @@ export const quickSort: AlgorithmModule<QSState> = {
         'Nothing is wasted now: each of the first pass\'s 7 comparisons either grows the small zone with one swap or leaves the element exactly where it stands — no copies, no new lists, no merge. That sweep drops pivot 31 at index 6 and it never moves again; 5 such passes sort all 8 numbers in 21 comparisons, with only the O(log n) recursion stack as overhead.',
       insight:
         'And the slot the pivot lands in is not a rough guess — the sweep provably locks it into its final sorted position, which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
