@@ -205,7 +205,7 @@ function mergeSortSteps(): Step<MergeSortState>[] {
   const sortedRight = [...rightHalf].sort((a, b) => a - b)  // [8, 13, 25, 31]
   steps.push({
     state: blank('sorted-halves', { leftHalf: sortedLeft, rightHalf: sortedRight }),
-    description: `Left half sorted recursively: [${sortedLeft.join(', ')}] (3 comparisons inside). Right half sorted recursively: [${sortedRight.join(', ')}] (3 comparisons inside). Now comes the merge — this is where the scratch buffer enters.`,
+    description: `Left half sorted recursively: [${sortedLeft.join(', ')}] (5 comparisons inside). Right half sorted recursively: [${sortedRight.join(', ')}] (5 comparisons inside). Now comes the merge — this is where the scratch buffer enters.`,
     codeLine: 3,
   })
 
@@ -434,7 +434,7 @@ function NewListsViz({ step }: { step: Step<NewListsState> }) {
           return ''
         }}
         pointerFor={k => {
-          if (k === pivotIdx) return { label: 'pivot', tone: 'amber' }
+          if (k === pivotIdx) return { label: 'pivot', tone: 'sky' }
           if (phase === 'scan' && k === scanIdx) return { label: 'copy', tone: 'mint' }
           return null
         }}
@@ -459,7 +459,7 @@ function NewListsViz({ step }: { step: Step<NewListsState> }) {
       )}
       <Legend
         items={[
-          { tone: 'amber', label: 'pivot' },
+          { tone: 'sky', label: 'pivot' },
           { tone: 'mint', label: 'current element / smalls' },
           { tone: 'amber', label: 'bigs list' },
         ]}
