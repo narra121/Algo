@@ -1,9 +1,8 @@
 import type { AlgorithmModule, Step } from '../../core/types'
+import { naiveDemo, gapDemo, setDemo } from './demos'
+import { S, CHARS } from './data'
 
 /* Canonical example: Longest Substring Without Repeating Characters on s = "abcbadcab". */
-
-const S = 'abcbadcab'
-const CHARS = S.split('')
 
 interface SWState {
   chars: string[]
@@ -166,6 +165,7 @@ export const slidingWindow: AlgorithmModule<SWState> = {
       space: 'O(min(n, alphabet))',
       issues:
         'Three nested layers of waste: substring (i..j) is re-scanned from scratch even though (i..j−1) was verified duplicate-free a moment earlier — one new letter forgets all previous work. Worse, once a duplicate poisons (i..j), every longer substring starting at i is doomed too, yet they all still get checked. At n = 100,000 that is billions of character checks where the window needs ~200,000 pointer moves.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -190,6 +190,7 @@ export const slidingWindow: AlgorithmModule<SWState> = {
         'In "abcbadcab", b sits at indices 1, 3, 8 — and the gap from 3 to 8 promises the length-5 stretch "badca" (indices 3–7), which does hold b only once. But look inside it: \'a\' appears at BOTH index 4 and index 7. The stretch passes b\'s test and flunks a\'s. Predicted answer: 5. Real answer: 4.',
       insight:
         'One letter\'s gap only certifies that one letter. A valid stretch must be duplicate-free for EVERY letter at once — so you have to actually track the contents of a candidate stretch, not reason about letters in isolation.',
+      demo: gapDemo,
     },
     {
       title: 'Track the contents — extend each start with a hash set',
@@ -211,6 +212,7 @@ export const slidingWindow: AlgorithmModule<SWState> = {
         'Fully correct — starting at index 2 it extends through "cbad", stops at the second c, and finds the answer 4. But count the work: the 9 starts touch 4 + 3 + 5 + 5 + 4 + 4 + 3 + 2 + 1 ≈ 31 characters and rebuild the set 9 times, where ~18 pointer moves would do. The waste is naked when the start moves from 2 to 3: "bad" was certified duplicate-free a heartbeat ago, yet the set is emptied and b, a, d are all re-proven from scratch.',
       insight:
         'When a repeat at the right edge kills a run, everything you just verified is STILL clean — so don\'t restart. Keep the window\'s contents and evict from the LEFT just far enough to remove the clash.',
+      demo: setDemo,
     },
     {
       title: 'Sliding window — one window, two forward-only edges',
@@ -232,6 +234,7 @@ export const slidingWindow: AlgorithmModule<SWState> = {
         'Nothing is wasted now: each of the 9 characters enters the window exactly once (R\'s 9 moves) and leaves at most once (L moves only 5 times here) — 14 pointer moves on this string, against 45 substrings and ~165 character checks for brute force. The inner while LOOKS nested, but its lifetime total is bounded by how far L can travel, so the whole run stays linear.',
       insight:
         'L can afford to only ever move forward because one duplicate doesn\'t kill one window — it condemns every start at or before its old copy in a single stroke. That is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
