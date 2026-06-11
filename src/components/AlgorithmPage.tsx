@@ -1,25 +1,11 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { AlgorithmModule } from '../core/types'
 import { useStepPlayer } from '../core/useStepPlayer'
 import { PlayerControls } from './PlayerControls'
 import { PseudocodePanel } from './PseudocodePanel'
 import { ProblemsList } from './ProblemsList'
 import { JourneyPanel } from './JourneyPanel'
-
-function Narration({ text }: { text: string }) {
-  const words = text.split(' ')
-  return (
-    <div className="narration">
-      {words.map((w, i) => (
-        <Fragment key={i}>
-          <span className="nw" style={{ animationDelay: `${Math.min(i * 26, 800)}ms` }}>
-            {w}
-          </span>{' '}
-        </Fragment>
-      ))}
-    </div>
-  )
-}
+import { Narration } from './Narration'
 
 export function AlgorithmPage({ algo, onBack }: { algo: AlgorithmModule; onBack: () => void }) {
   const steps = useMemo(() => algo.generateSteps(), [algo])
