@@ -17,13 +17,6 @@ interface LinearState {
   found: boolean
 }
 
-const NAIVE_PSEUDOCODE = [
-  'for i ← 0 .. n − 1:',
-  '    if a[i] = target:',
-  '        return i',
-  'return not found',
-]
-
 function linearSteps(): Step<LinearState>[] {
   const steps: Step<LinearState>[] = []
 
@@ -213,6 +206,19 @@ function jumpSteps(): Step<JumpState>[] {
   const step = Math.floor(Math.sqrt(n))  // 3
   const steps: Step<JumpState>[] = []
 
+  // Simulate binary search on ARR/TARGET to get the honest probe count for the narration.
+  let bsProbes = 0
+  {
+    let lo = 0, hi = n - 1
+    while (lo <= hi) {
+      bsProbes++
+      const mid = (lo + hi) >> 1
+      if (ARR[mid] === TARGET) break
+      else if (ARR[mid] < TARGET) lo = mid + 1
+      else hi = mid - 1
+    }
+  }
+
   // Intro sentinel — two steps to set the scene properly
   steps.push({
     state: { phase: 'leap', i: -1, blockStart: null, blockEnd: null, scanIdx: null, leaps: 0, probes: 0, found: false, foundAt: null },
@@ -288,7 +294,7 @@ function jumpSteps(): Step<JumpState>[] {
       foundAt = k
       steps.push({
         state: { phase: 'done', i: blockEnd, blockStart, blockEnd, scanIdx: k, leaps, probes, found: true, foundAt },
-        description: `Scan: a[${k}] = ${ARR[k]} — found ${TARGET}! Total probes: ${probes} (${leaps} leaps + ${probes - leaps} scan check${probes - leaps === 1 ? '' : 's'}). Binary search finds the same answer in just ${Math.ceil(Math.log2(n))} probes — at a million elements, jump search still needs ~2,000 where ~20 would do.`,
+        description: `Scan: a[${k}] = ${ARR[k]} — found ${TARGET}! Total probes: ${probes} (${leaps} leaps + ${probes - leaps} scan check${probes - leaps === 1 ? '' : 's'}). Binary search finds the same answer in just ${bsProbes} probes — at a million elements, jump search still needs ~2,000 where ~20 would do.`,
         codeLine: 4,
       })
       return steps
@@ -341,7 +347,7 @@ function JumpViz({ step }: { step: Step<JumpState> }) {
         items={[
           { tone: 'mint', label: 'current probe' },
           { tone: 'amber', label: 'found target' },
-          { label: 'scan block' },
+          { tone: 'amber', label: 'scan block' },
         ]}
       />
     </>
