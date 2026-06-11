@@ -234,11 +234,13 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
       spark:
         'Replace the call stack with a loop: seed dp[0] and dp[1], then march down the street filling each dp[i] from the two entries already sitting behind it.',
       pseudocode: [
+        'dp ← table of size n, all empty',
         'dp[0] ← value[0]',
         'dp[1] ← max(value[0], value[1])',
         'for i ← 2 … n − 1:',
-        '    dp[i] ← max(dp[i − 1],',
-        '                value[i] + dp[i − 2])',
+        '    rob  ← value[i] + dp[i − 2]',
+        '    skip ← dp[i − 1]',
+        '    dp[i] ← max(rob, skip)',
         'return dp[n − 1]',
       ],
       time: 'O(n)',
