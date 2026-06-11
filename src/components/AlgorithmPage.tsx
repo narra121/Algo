@@ -81,9 +81,9 @@ export function AlgorithmPage({ algo, onBack }: { algo: AlgorithmModule; onBack:
           <div className="viz-stage">
             <Visualizer step={player.step} />
           </div>
-          <Narration key={player.index} text={player.step.description} />
-          <div style={{ height: 14 }} />
           <PlayerControls player={player} />
+          <div style={{ height: 14 }} />
+          <Narration key={player.index} text={player.step.description} />
         </section>
         <PseudocodePanel lines={algo.pseudocode} hot={player.step.codeLine} />
       </div>
