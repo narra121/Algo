@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react'
 import type { AlgorithmModule, Step } from '../../core/types'
+import { naiveDemo, greedyDemo, recursionDemo, memoDemo } from './demos'
+import { VALUES } from './data'
 
 /* Canonical example: House Robber — max loot from a row of houses, no two adjacent. */
-
-const VALUES = [2, 7, 9, 3, 1, 8, 4]
 
 interface DPState {
   values: number[]
@@ -164,6 +164,7 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
       space: 'O(n)',
       issues:
         'The same sub-question — "what is the best haul up to house i?" — gets re-answered inside exponentially many subsets, because the enumeration never writes anything down. Doubling the street doubles the EXPONENT: 7 houses cost 128 subsets, a 40-house street already needs over a trillion. DP answers each of the 7 sub-questions exactly once and reads the rest from the table.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -185,6 +186,7 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
         'On [2, 7, 9, 3, 1, 8, 4] the even houses total 2 + 9 + 1 + 4 = 16 and the odd houses total 7 + 3 + 8 = 18 — but the true best is 19, from houses 0, 2, and 5. The winning plan skips TWO houses in a row (the 3 and the 1) so it can take both the 9 and the 8, a rhythm no strict alternation can ever produce.',
       insight:
         'The rule only forbids adjacent picks — it never forces a pattern. Every house needs its own rob-or-skip decision, weighed against what the houses around it offer.',
+      demo: greedyDemo,
     },
     {
       title: 'Rob-or-skip recursion — try both choices at every house',
@@ -204,6 +206,7 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
         'It is correct — best(6) returns 19. But watch the call tree: pricing these 7 houses fires 25 calls to answer only 7 distinct questions. best(2) gets recomputed 5 times and best(1) 8 times, dutifully returning the same 11 and 7 on every visit. At 40 houses the tree balloons to roughly 331 million calls — Fibonacci growth in disguise.',
       insight:
         'There are only 7 distinct subproblems, and each answer never changes once known. Compute each one a single time, write it down, and every repeat visit becomes a lookup.',
+      demo: recursionDemo,
     },
     {
       title: 'Memoize — cache each answer the first time',
@@ -224,6 +227,7 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
         'The 25 calls collapse to 7 real computations plus a few cache hits, and 40 houses now cost 40 fills instead of 331 million calls. But the recursion still dives 7 frames deep to house 0 before it can price house 6 — on a 100,000-house street that depth blows the stack. And look at the order the memo actually fills: 0, 1, 2, 3, 4, 5, 6. The recursion is an expensive way to discover plain left-to-right.',
       insight:
         'The fill order was never a mystery — each answer needs only the two entries just before it. So drop the recursion and write the table directly, left to right.',
+      demo: memoDemo,
     },
     {
       title: 'Bottom-up table — fill dp left to right',
@@ -244,6 +248,7 @@ export const dynamicProgramming: AlgorithmModule<DPState> = {
         'Nothing is wasted now: each of the 7 entries is written exactly once, and each write costs two lookups, an add, and a max — 7 constant-time fills versus the 128 subsets of brute force or the 25 calls of naive recursion. No call stack, no cache misses, no question ever answered twice.',
       insight:
         'And the table exposes one final economy: dp[i] only ever consults dp[i−1] and dp[i−2] — two numbers standing in for every plan that came before — which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
