@@ -1,8 +1,10 @@
 import type { AlgorithmModule, Step } from '../../core/types'
+import { naiveDemo, insertionDemo, naiveSplitDemo } from './demos'
+import { ARR as _ARR } from './data'
 
 /* Canonical example: sort [38, 27, 43, 3, 9, 82, 10, 5] with merge sort. */
 
-const ARR = [38, 27, 43, 3, 9, 82, 10, 5]
+const ARR = _ARR
 
 interface MSState {
   /** Snapshot of the working array (merged prefix + unmerged remainders inside the window). */
@@ -194,6 +196,7 @@ export const mergeSort: AlgorithmModule<MSState> = {
       space: 'O(1)',
       issues:
         'Each pass moves a value roughly ONE position toward home — 82 sitting at the front of a million-element array needs nearly a million passes\' worth of nudges. Comparisons between the same neighbors repeat across passes, and nothing global is ever learned from a sweep. At a million elements that is ~500 billion comparisons, while merge sort needs ~20 million — a 25,000× difference from the same starting data.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -218,6 +221,7 @@ export const mergeSort: AlgorithmModule<MSState> = {
         'Correct, and genuinely leaner than bubble sort: on [38, 27, 43, 3, 9, 82, 10, 5] it needs exactly 17 one-slot shifts — one per inversion — instead of repeated full sweeps. But watch 5, the last value: it crawls past 82, 43, 38, 27, 10 and 9, six separate shifts to travel six positions. Every value still moves ONE slot per operation, so a reversed million-element array still costs ~500 billion shifts. The constant got better; the n² did not.',
       insight:
         'The real enemy is one-step-at-a-time movement. To beat n², a value like 5 must be able to leap from one end of the array toward home in a single operation — which means restructuring the problem, not polishing the loop.',
+      demo: insertionDemo,
     },
     {
       title: 'Divide and conquer — sort each half separately, then stick them together',
@@ -236,6 +240,7 @@ export const mergeSort: AlgorithmModule<MSState> = {
         'Sort the halves: left becomes [3, 27, 38, 43], right becomes [5, 9, 10, 82]. Concatenate and you get [3, 27, 38, 43, 5, 9, 10, 82] — 43 sitting in front of 5. The split never asked where each value belongs GLOBALLY: 5, 9 and 10 live in the right half but belong among the left half\'s values. Gluing end-to-end throws away the answer.',
       insight:
         'But look at what survived the wreck: both halves came out perfectly sorted — only the glue failed. And two SORTED lists can be zipped in linear time: each front is its list\'s minimum, so compare the two fronts, take the smaller, repeat — 8 placements here, no rescanning, ever.',
+      demo: naiveSplitDemo,
     },
     {
       title: 'Merge sort — split to single elements, zip sorted halves all the way up',
@@ -245,9 +250,12 @@ export const mergeSort: AlgorithmModule<MSState> = {
         'mergeSort(a, lo, hi):',
         '    if lo ≥ hi: return          // one element ⇒ sorted',
         '    mid ← (lo + hi) / 2',
-        '    mergeSort(a, lo, mid)',
-        '    mergeSort(a, mid + 1, hi)',
-        '    merge the two sorted halves: take smaller front, repeat',
+        '    mergeSort(a, lo, mid)       // sort left half',
+        '    mergeSort(a, mid + 1, hi)   // sort right half',
+        '    while both halves have items:',
+        '        take the smaller front → output',
+        '    append the leftover half',
+        '    copy output back into a[lo..hi]',
       ],
       time: 'O(n log n)',
       space: 'O(n)',
@@ -256,6 +264,7 @@ export const mergeSort: AlgorithmModule<MSState> = {
         'Nothing is wasted now: every comparison happens between two fronts of sorted lists, and the winner is locked into its final position forever — placed values never move again. The 5 that needed 6 insertion shifts gets carried home inside its merges instead of crawling slot by slot. Halving 8 elements bottoms out in log₂ 8 = 3 levels, each touching all 8 elements once: 24 placements total, versus up to 28 pair-comparisons per bubble pass — and the gap explodes to 25,000× at a million elements.',
       insight:
         'All the cleverness lives in one fact — merging two already-sorted lists is almost free — which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
