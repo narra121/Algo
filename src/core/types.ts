@@ -10,6 +10,14 @@ export interface Step<S = unknown> {
   codeLine: number
 }
 
+/** An embedded, on-demand animation of ONE approach (brute force or journey attempt). */
+export interface AttemptDemo<S = any> {
+  /** Pure function producing the full deterministic step list for this attempt. */
+  generateSteps: () => Step<S>[]
+  /** Renders one step's state. Pure w.r.t. props. */
+  Visualizer: ComponentType<{ step: Step<S> }>
+}
+
 export interface Problem {
   title: string
   difficulty: 'Easy' | 'Medium' | 'Hard'
@@ -55,6 +63,8 @@ export interface NaiveApproach {
    * (with real numbers), what it fails to exploit. 2–4 sentences.
    */
   issues: string
+  /** Optional embedded animation of this brute force running on the page's input. */
+  demo?: AttemptDemo
 }
 
 /**
@@ -83,6 +93,8 @@ export interface JourneyAttempt {
    * attempt, the bridge sentence into the aha banner.
    */
   insight: string
+  /** Optional embedded animation of this attempt running on the page's input. */
+  demo?: AttemptDemo
 }
 
 export interface AlgorithmModule<S = any> {
