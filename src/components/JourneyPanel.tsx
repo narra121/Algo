@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { JourneyAttempt, NaiveApproach } from '../core/types'
+import { MiniPlayer } from './MiniPlayer'
 
 const VERDICT = {
   fail: { chip: 'bad', mark: '✗', label: 'dead end' },
@@ -7,13 +8,13 @@ const VERDICT = {
   optimal: { chip: 'time', mark: '✓', label: 'the answer' },
 } as const
 
-function AttemptBody({ a }: { a: JourneyAttempt }) {
+function AttemptBody({ a, hot = -1 }: { a: JourneyAttempt; hot?: number }) {
   return (
     <>
       <p className="jspark">{a.spark}</p>
       <div className="jcode code-lines">
         {a.pseudocode.map((line, i) => (
-          <div key={i} className="code-line">
+          <div key={i} className={`code-line${i === hot ? ' hot' : ''}`}>
             <span className="ln">{i + 1}</span>
             <span>{line}</span>
           </div>
@@ -24,6 +25,31 @@ function AttemptBody({ a }: { a: JourneyAttempt }) {
         <span className={`chip ${a.verdict === 'optimal' ? 'space' : 'bad'}`}>space {a.space}</span>
       </div>
     </>
+  )
+}
+
+function RevealedAttempt({ a, num }: { a: JourneyAttempt; num: number }) {
+  const v = VERDICT[a.verdict]
+  const [hot, setHot] = useState(-1)
+  return (
+    <div className={`jstep revealed ${a.verdict}`}>
+      <div className="jrail">
+        <span className={`jdot ${a.verdict}`}>{v.mark}</span>
+      </div>
+      <div className="jbody">
+        <div className="jtitle">
+          <span className="jnum">attempt {num}</span> {a.title}
+          <span className={`jverdict ${a.verdict}`}>{v.label}</span>
+        </div>
+        <AttemptBody a={a} hot={hot} />
+        <p className={`jbreaks ${a.verdict}`}>
+          <strong>{a.verdict === 'optimal' ? '✓ why it holds:' : `${v.mark} where it breaks:`}</strong>{' '}
+          {a.breaks}
+        </p>
+        <p className="jinsight">💡 {a.insight}</p>
+        {a.demo && <MiniPlayer demo={a.demo} onStepChange={setHot} />}
+      </div>
+    </div>
   )
 }
 
@@ -86,7 +112,6 @@ export function JourneyPanel({
               </div>
             )
           }
-          const v = VERDICT[a.verdict]
           if (i === revealed) {
             return (
               <div key={i} className="jstep current">
@@ -108,25 +133,7 @@ export function JourneyPanel({
               </div>
             )
           }
-          return (
-            <div key={i} className={`jstep revealed ${a.verdict}`}>
-              <div className="jrail">
-                <span className={`jdot ${a.verdict}`}>{v.mark}</span>
-              </div>
-              <div className="jbody">
-                <div className="jtitle">
-                  <span className="jnum">attempt {num}</span> {a.title}
-                  <span className={`jverdict ${a.verdict}`}>{v.label}</span>
-                </div>
-                <AttemptBody a={a} />
-                <p className={`jbreaks ${a.verdict}`}>
-                  <strong>{a.verdict === 'optimal' ? '✓ why it holds:' : `${v.mark} where it breaks:`}</strong>{' '}
-                  {a.breaks}
-                </p>
-                <p className="jinsight">💡 {a.insight}</p>
-              </div>
-            </div>
-          )
+          return <RevealedAttempt key={i} a={a} num={num} />
         })}
       </div>
 
