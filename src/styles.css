@@ -1252,3 +1252,49 @@ button {
   display: flex;
   justify-content: space-between;
 }
+
+/* ---- embedded mini player (brute-force card + journey attempts) ---- */
+.mini-open {
+  margin-top: 12px;
+  align-self: flex-start;
+  background: var(--mint-dim);
+  color: var(--mint);
+  border: 1px solid var(--mint);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mini-open:hover {
+  background: var(--mint);
+  color: var(--bg);
+}
+.mini-player {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px dashed rgba(233, 237, 255, 0.18);
+  padding-top: 12px;
+}
+.mini-player .viz-stage {
+  min-height: 150px;
+}
+.mini-head {
+  display: flex;
+  justify-content: flex-end;
+}
+.mini-close {
+  background: none;
+  border: none;
+  color: var(--ink);
+  opacity: 0.55;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.mini-close:hover {
+  opacity: 1;
+}
