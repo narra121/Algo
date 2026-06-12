@@ -1,10 +1,10 @@
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
+import { naiveDemo, labelsDemo, treesDemo } from './demos'
+import { N } from './data'
 
 /* Canonical example: 8 nodes (0–7); unions arrive one at a time:
    (0,1) (2,3) (4,5) (6,7) (1,3) (5,7) — leaving 2 components —
    then we ask "find(0) == find(4)?", then union(3,7) merges everything. */
-
-const N = 8
 
 interface UFState {
   /** parent[i] — each node's single upward pointer (parent[i] === i means root). */
@@ -24,6 +24,23 @@ function generateSteps(): Step<UFState>[] {
   const rank: number[] = new Array(N).fill(0)
   let components = N
 
+  /* Live pseudocode variables mirrored into the vars panel. */
+  let aV = '—'
+  let bV = '—'
+  let raV = '—'
+  let rbV = '—'
+
+  const fmt = (arr: number[]) => `[${arr.join(', ')}]`
+  const mkVars = (changed: string[]): VarEntry[] => [
+    { name: 'parent[]', value: fmt(parent), changed: changed.includes('parent[]') || undefined },
+    { name: 'rank[]', value: fmt(rank), changed: changed.includes('rank[]') || undefined },
+    { name: 'a', value: aV, changed: changed.includes('a') || undefined },
+    { name: 'b', value: bV, changed: changed.includes('b') || undefined },
+    { name: 'ra', value: raV, changed: changed.includes('ra') || undefined },
+    { name: 'rb', value: rbV, changed: changed.includes('rb') || undefined },
+    { name: 'components', value: String(components), changed: changed.includes('components') || undefined },
+  ]
+
   const snap = (active: number[], flash: number[]): UFState => ({
     parent: [...parent],
     rank: [...rank],
@@ -36,126 +53,155 @@ function generateSteps(): Step<UFState>[] {
     state: snap([], []),
     description: `The mission: 7 unions will arrive one at a time — (0,1) (2,3) (4,5) (6,7) (1,3) (5,7) (3,7) — and we must keep a live count of connected components, plus answer "are 0 and 4 connected?" mid-stream. Eight nodes, eight tiny kingdoms to start: parent[i] = i, rank 0, component count = ${components}. We never see the whole graph up front.`,
     codeLine: 0,
+    vars: mkVars(['parent[]', 'rank[]', 'components']),
   })
 
   /* ---- union(0,1): spelled out in full ---- */
+  aV = '0'; bV = '1'; raV = '0'; rbV = '1'
   steps.push({
     state: snap([0, 1], []),
-    description: `union(0, 1): first, find both roots. find(0) takes zero hops — parent[0] = 0, so 0 is already a root. Same for 1. Roots 0 and 1 differ, so these really are two separate components.`,
+    description: `union(0, 1): first, find both roots. find(0) takes zero hops — parent[0] = 0, so 0 is already a root. Same for 1: ra = 0, rb = 1. Roots 0 and 1 differ, so these really are two separate components.`,
     codeLine: 7,
+    vars: mkVars(['a', 'b', 'ra', 'rb']),
   })
   parent[1] = 0
   rank[0] = 1
   components--
   steps.push({
     state: snap([], [1]),
-    description: `Both roots have rank 0 — a tie. Union by rank says: attach either one, but bump the winner. Node 1 hooks under 0, and rank[0] rises to 1. Ties are the ONLY time rank grows — that stinginess is what keeps trees shallow. ${components} components left.`,
+    description: `Both roots have rank 0 — a tie. Union by rank says: attach either one, but bump the winner. Node 1 hooks under 0 (parent[1] ← 0), and rank[0] rises to 1. Ties are the ONLY time rank grows — that stinginess is what keeps trees shallow. ${components} components left.`,
     codeLine: 9,
+    vars: mkVars(['parent[]', 'rank[]', 'components']),
   })
 
-  /* ---- three more rank-0 ties, quickly ---- */
+  /* ---- three more rank-0 ties ---- */
+  aV = '2'; bV = '3'; raV = '2'; rbV = '3'
   parent[3] = 2
   rank[2] = 1
   components--
   steps.push({
     state: snap([2, 3], [3]),
-    description: `union(2, 3): same story — two rank-0 roots, so 3 hooks under 2 and rank[2] becomes 1. ${components} components.`,
+    description: `union(2, 3): both arguments are already roots — find(2) = 2 and find(3) = 3 in zero hops — and both sit at rank 0, another tie. So 3 hooks under 2 (parent[3] ← 2) and rank[2] becomes 1. ${components} components.`,
     codeLine: 9,
+    vars: mkVars(['a', 'b', 'ra', 'rb', 'parent[]', 'rank[]', 'components']),
   })
+  aV = '4'; bV = '5'; raV = '4'; rbV = '5'
   parent[5] = 4
   rank[4] = 1
   components--
   steps.push({
     state: snap([4, 5], [5]),
-    description: `union(4, 5): another rank-0 tie. 5 attaches under 4, rank[4] = 1. ${components} components.`,
+    description: `union(4, 5): find(4) = 4 and find(5) = 5 — two zero-hop roots, both rank 0, tied again. 5 attaches under 4 (parent[5] ← 4) and rank[4] rises to 1. ${components} components.`,
     codeLine: 9,
+    vars: mkVars(['a', 'b', 'ra', 'rb', 'parent[]', 'rank[]', 'components']),
   })
+  aV = '6'; bV = '7'; raV = '6'; rbV = '7'
   parent[7] = 6
   rank[6] = 1
   components--
   steps.push({
     state: snap([6, 7], [7]),
-    description: `union(6, 7): 7 attaches under 6. We now have four tidy two-node trees: {0,1} {2,3} {4,5} {6,7}. ${components} components.`,
+    description: `union(6, 7): find(6) = 6, find(7) = 7 — one more rank-0 tie, so 7 attaches under 6 (parent[7] ← 6) and rank[6] = 1. We now have four tidy two-node trees: {0,1} {2,3} {4,5} {6,7}. ${components} components.`,
     codeLine: 9,
+    vars: mkVars(['a', 'b', 'ra', 'rb', 'parent[]', 'rank[]', 'components']),
   })
 
   /* ---- union(1,3): first non-root arguments ---- */
+  aV = '1'; bV = '3'; raV = '0'; rbV = '2'
   steps.push({
     state: snap([1, 0, 3, 2], []),
-    description: `union(1, 3): neither argument is a root! find(1) climbs one arrow to root 0; find(3) climbs one arrow to root 2. Roots 0 ≠ 2, so these two trees have never met — merge them.`,
+    description: `union(1, 3): neither argument is a root! find(1) climbs one arrow, 1 → 0, so ra = 0; find(3) climbs 3 → 2, so rb = 2. Roots 0 ≠ 2, so these two trees have never met — merge them.`,
     codeLine: 7,
+    vars: mkVars(['a', 'b', 'ra', 'rb']),
   })
   parent[2] = 0
   rank[0] = 2
   components--
   steps.push({
     state: snap([], [2]),
-    description: `rank[0] = 1 and rank[2] = 1 — tied again. Root 2 (taking nodes 2 AND 3 with it) now answers to root 0, and rank[0] grows to 2. One pointer write merged two whole groups. ${components} components.`,
+    description: `rank[0] = 1 and rank[2] = 1 — tied again. Root 2 (taking nodes 2 AND 3 with it) now answers to root 0: parent[2] ← 0, and rank[0] grows to 2. One pointer write merged two whole groups. ${components} components.`,
     codeLine: 9,
+    vars: mkVars(['parent[]', 'rank[]', 'components']),
   })
 
   /* ---- union(5,7) ---- */
+  aV = '5'; bV = '7'; raV = '4'; rbV = '6'
   steps.push({
     state: snap([5, 4, 7, 6], []),
-    description: `union(5, 7): find(5) climbs to root 4, find(7) climbs to root 6. Different roots again — this union will genuinely merge something.`,
+    description: `union(5, 7): find(5) climbs 5 → 4 so ra = 4; find(7) climbs 7 → 6 so rb = 6. Different roots again — this union will genuinely merge something.`,
     codeLine: 7,
+    vars: mkVars(['a', 'b', 'ra', 'rb']),
   })
   parent[6] = 4
   rank[4] = 2
   components--
   steps.push({
     state: snap([], [6]),
-    description: `Ranks tied at 1, so root 6 bows to root 4 and rank[4] becomes 2. Down to ${components} components: {0,1,2,3} on the left, {4,5,6,7} on the right.`,
+    description: `Ranks tied at 1, so root 6 bows to root 4: parent[6] ← 4, and rank[4] becomes 2. Down to ${components} components: {0,1,2,3} on the left, {4,5,6,7} on the right.`,
     codeLine: 9,
+    vars: mkVars(['parent[]', 'rank[]', 'components']),
   })
 
   /* ---- connectivity query: find(0) == find(4)? ---- */
+  aV = '0'; bV = '4'; raV = '—'; rbV = '—'
   steps.push({
     state: snap([], []),
-    description: `Two kingdoms remain. Now the killer query: are 0 and 4 connected? Union-Find never searches edges — no BFS, no visited set. We just ask each node to name its root and compare.`,
+    description: `Two kingdoms remain. Now the killer query: are 0 and 4 connected? Union-Find never searches edges — no BFS, no visited set. We just ask each node to name its root and compare: find(0) vs find(4).`,
     codeLine: 1,
+    vars: mkVars(['a', 'b', 'ra', 'rb']),
   })
+  raV = '0'
   steps.push({
     state: snap([0], []),
-    description: `find(0): parent[0] = 0, so 0 IS its own root. Answered in zero hops — find(0) = 0.`,
+    description: `find(0): parent[0] = 0, so 0 IS its own root. Answered in zero hops — ra = find(0) = 0.`,
     codeLine: 5,
+    vars: mkVars(['ra']),
+  })
+  rbV = '4'
+  steps.push({
+    state: snap([0, 4], []),
+    description: `find(4): parent[4] = 4 — also a root, also zero hops. So ra = find(0) = 0 but rb = find(4) = 4.`,
+    codeLine: 5,
+    vars: mkVars(['rb']),
   })
   steps.push({
     state: snap([0, 4], []),
-    description: `find(4): parent[4] = 4 — also a root, also zero hops. So find(0) = 0 but find(4) = 4.`,
-    codeLine: 5,
-  })
-  steps.push({
-    state: snap([0, 4], []),
-    description: `0 ≠ 4: different roots means different components — NOT connected. Two pointer walks replaced an entire graph traversal. That's the whole sales pitch.`,
+    description: `ra = 0 ≠ rb = 4: different roots means different components — NOT connected. Two pointer walks replaced an entire graph traversal. That's the whole sales pitch.`,
     codeLine: 8,
+    vars: mkVars([]),
   })
 
   /* ---- union(3,7): deep finds with path compression ---- */
+  aV = '3'; bV = '7'; raV = '0'; rbV = '—'
   parent[3] = 0 // compression: parent[3] was 2; parent[parent[3]] = parent[2] = 0
   steps.push({
     state: snap([3, 0], [3]),
-    description: `union(3, 7): find(3) climbs 3 → 2 → 0. And here path compression earns its keep: mid-walk, parent[3] is rewired from 2 straight to root 0. Next time, 3 reaches its root in ONE hop instead of two.`,
+    description: `union(3, 7): find(3) climbs 3 → 2 → 0, so ra = 0. And here path compression earns its keep: mid-walk, parent[3] is rewired from 2 straight to root 0. Next time, 3 reaches its root in ONE hop instead of two.`,
     codeLine: 3,
+    vars: mkVars(['a', 'b', 'ra', 'rb', 'parent[]']),
   })
+  rbV = '4'
   parent[7] = 4 // compression: parent[7] was 6; parent[parent[7]] = parent[6] = 4
   steps.push({
     state: snap([7, 4], [7]),
-    description: `find(7) climbs 7 → 6 → 4, and compression rewires parent[7] directly to 4. Every lookup physically flattens the tree as a side effect — future finds get cheaper for free.`,
+    description: `find(7) climbs 7 → 6 → 4, so rb = 4 — and compression rewires parent[7] directly to 4. Every lookup physically flattens the tree as a side effect — future finds get cheaper for free.`,
     codeLine: 3,
+    vars: mkVars(['rb', 'parent[]']),
   })
   parent[4] = 0
   rank[0] = 3
   components--
   steps.push({
     state: snap([], [4]),
-    description: `Roots 0 and 4 both have rank 2 — one final tie. Root 4 attaches under root 0, rank[0] becomes 3, and the entire graph is ONE component. Ask "find(0) == find(4)?" now and the answer flips to yes.`,
+    description: `Roots 0 and 4 both have rank 2 — one final tie. Root 4 attaches under root 0 (parent[4] ← 0), rank[0] becomes 3, and the entire graph is ONE component. Ask "find(0) == find(4)?" now and the answer flips to yes.`,
     codeLine: 9,
+    vars: mkVars(['parent[]', 'rank[]', 'components']),
   })
   steps.push({
     state: snap([], []),
     description: `Done: 7 unions took us from 8 components to ${components}, and the entire run — every find, every merge, the mid-stream query — cost about a dozen pointer hops. The naive relabel-after-every-union approach would have burned ~56 label rewrites on these same 8 nodes. Rank held the forest's height to 3 and compression keeps shaving it, so each operation costs amortized α(n): effectively constant, forever.`,
     codeLine: 11,
+    vars: mkVars([]),
   })
 
   return steps
@@ -265,6 +311,7 @@ export const unionFind: AlgorithmModule<UFState> = {
       space: 'O(V + E)',
       issues:
         'Every query starts from zero, re-deriving connectivity the previous query already proved — nothing learned is ever kept. With a million nodes and a stream of m queries that snowballs to O(m·(V+E)) total work, and the relabeling variant is no better: one unlucky union rewrites half the graph. Union-Find caches the answer in the forest itself, so each new question costs two near-constant root walks instead of a full traversal.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -290,6 +337,7 @@ export const unionFind: AlgorithmModule<UFState> = {
         'Queries are now free — the mid-stream "0 connected to 4?" is just comp[0] = comp[4], one comparison. But every union scans all 8 nodes hunting for the losing label: 7 unions × 8 checks ≈ 56 operations on this tiny instance, and the final union(3,7) alone rewrites 4 labels — half the graph. At a million nodes, one unlucky union rewrites 500,000 labels. We did not kill the O(n) cost, we just moved it from queries to unions.',
       insight:
         'Caching connectivity in the nodes is the right move — it hurts only because EVERY member personally stores the group name. Let members store a pointer to someone else instead, so just one node has to know the name.',
+      demo: labelsDemo,
     },
     {
       title: 'Trees of parent pointers — merge by repointing one root',
@@ -311,19 +359,25 @@ export const unionFind: AlgorithmModule<UFState> = {
         'On this stream it looks great: every union is a couple of hops plus one pointer write, and the query walks 0 → 1 → 3 and 4 → 5 → 7 — two hops each. But "a\'s root always bows to b\'s root" is reckless: feed these same 8 nodes the stream (0,1) (1,2) (2,3) (3,4) (4,5) (5,6) (6,7) and you weld one long chain — find(0) now climbs 7 hops, and on n nodes it is n − 1. The O(n) cost snuck back in, hiding inside find instead of union.',
       insight:
         'Chains form because tall trees blindly hang under short ones — and because a long path, once walked, never heals. Pick who bows by height, and make every find flatten the path it just climbed.',
+      demo: treesDemo,
     },
     {
       title: 'Union by rank + path compression — the forest that flattens itself',
       spark:
         'Two cheap guards: attach the shorter tree under the taller (union by rank), and whenever find walks to a root, rewire the nodes it passed to point nearer that root (path compression). Both piggyback on work you were already doing.',
       pseudocode: [
-        'parent[i] ← i, rank[i] ← 0 for every node',
-        'find(x): walk to the root, rewiring x to its grandparent as you go',
+        'parent[i] ← i, rank[i] ← 0 for every node   // n components',
+        'find(x):',
+        '    while parent[x] ≠ x:',
+        '        parent[x] ← parent[parent[x]]   // path compression',
+        '        x ← parent[x]',
+        '    return x',
         'union(a, b):',
         '    ra ← find(a); rb ← find(b)',
         '    if ra = rb: already connected — stop',
         '    attach lower-rank root under higher   // union by rank',
         '    on a rank tie: winner\'s rank += 1',
+        '    components ← components − 1',
       ],
       time: 'O(α(n)) amortized per op',
       space: 'O(n)',
@@ -332,6 +386,7 @@ export const unionFind: AlgorithmModule<UFState> = {
         'Nothing is wasted now. Rank holds this forest\'s height to 3, so the entire run — 7 unions, every find, the mid-stream query — costs about a dozen pointer hops versus ~56 label rewrites. And the deep finds pay forward: union(3,7) rewires parent[3] from 2 straight to root 0 mid-walk, so a walk that cost 2 hops costs 1 forever after. Together the two tricks amortize every operation to α(n) ≤ 4 — effectively constant.',
       insight:
         'A whole component\'s identity now lives in a single root, so merging thousand-node groups is still one pointer write — which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
