@@ -431,7 +431,7 @@ function bfsSteps(): Step<BfsState>[] {
   // Simulate BFS, emitting only meaningful steps:
   // - pop step for each node
   // - stamp step for each newly-seen neighbour
-  // - ONE skip step per node (the most instructive already-seen skip)
+  // - ONE skip step per node (prefer the instructive isCheaper skip over any plain skip)
   while (queue.length > 0) {
     const u = queue.shift()!
 
@@ -441,7 +441,8 @@ function bfsSteps(): Step<BfsState>[] {
       codeLine: 2,
     })
 
-    let shownSkip = false
+    // Collect all seen-skips for this node first so we can pick the instructive one
+    const seenSkips: Array<{ v: NodeId; w: number; candidate: number; isCheaper: boolean }> = []
     for (const { v, w } of neighborsOf(u)) {
       const candidate = (dist as Record<string, number>)[u] + w
       const firstTime = !seen.includes(v)
@@ -454,16 +455,22 @@ function bfsSteps(): Step<BfsState>[] {
           description: `${u}–${v} (toll ${w}): ${v} never seen — stamp dist[${v}]=${candidate} and enqueue. First arrival is final; ${v} will never be revisited${candidate === 9 && v === 'D' ? ' — even though A→C→B→D = 8 is cheaper' : ''}.`,
           codeLine: 4,
         })
-      } else if (!shownSkip) {
-        // Show the most instructive skip (prefer the one where the better cost was missed)
+      } else {
         const isCheaper = candidate < (dist as Record<string, number>)[v]
-        steps.push({
-          state: snap({ current: u, examiningEdge: [u, v], accepted: false }),
-          description: `${u}–${v} (toll ${w}): ${v} already seen at dist[${v}]=${(dist as Record<string, number>)[v]}. BFS skips it — ${isCheaper ? `even though ${candidate} would be CHEAPER. This is where BFS goes wrong.` : 'no cheaper route here.'}`,
-          codeLine: 4,
-        })
-        shownSkip = true
+        seenSkips.push({ v, w, candidate, isCheaper })
       }
+    }
+
+    // Show one skip per node: prefer the instructive cheaper-but-ignored skip if any
+    const skipToShow =
+      seenSkips.find(s => s.isCheaper) ?? seenSkips[0] ?? null
+    if (skipToShow) {
+      const { v, w, candidate, isCheaper } = skipToShow
+      steps.push({
+        state: snap({ current: u, examiningEdge: [u, v], accepted: false }),
+        description: `${u}–${v} (toll ${w}): ${v} already seen at dist[${v}]=${(dist as Record<string, number>)[v]}. BFS skips it — ${isCheaper ? `even though ${candidate} would be CHEAPER. This is where BFS goes wrong.` : 'no cheaper route here.'}`,
+        codeLine: 4,
+      })
     }
   }
 
@@ -833,6 +840,8 @@ function plainQueueSteps(): Step<PlainQueueState>[] {
   const queue: NodeId[] = ['A']
   let pops = 0
   let relaxChecks = 0
+  // Honest per-node tracking: a pop is a duplicate only when processCount[u] > 1
+  const processCount: Partial<Record<NodeId, number>> = {}
 
   const snap = (partial: Partial<PlainQueueState>): PlainQueueState => ({
     dist: { ...dist },
@@ -856,13 +865,20 @@ function plainQueueSteps(): Step<PlainQueueState>[] {
   while (queue.length > 0) {
     const u = queue.shift()!
     pops++
+    processCount[u] = (processCount[u] ?? 0) + 1
+    const isDuplicate = processCount[u]! > 1
 
-    const isDuplicate = ['B', 'D', 'F'].includes(u) && pops > 3
     steps.push({
       state: snap({ current: u }),
-      description: `Pop #${pops}: dequeue ${u} at dist[${u}]=${dist[u]}.${isDuplicate ? ` (Second pass — ${u} was already processed at a stale cost; this is the redundant work a priority queue would eliminate.)` : ''}`,
+      description: isDuplicate
+        ? `Pop #${pops}: dequeue ${u} at dist[${u}]=${dist[u]}. Second pass — ${u} was already processed at a stale cost; this is the redundant work a priority queue would eliminate.`
+        : `Pop #${pops}: dequeue ${u} at dist[${u}]=${dist[u]}.`,
       codeLine: 2,
     })
+
+    // Collect all checks for this pop so we can decide what to emit
+    const improvements: Array<{ v: NodeId; w: number; candidate: number; oldDist: number }> = []
+    const noImproves: Array<{ v: NodeId; w: number; candidate: number; oldDist: number }> = []
 
     for (const { v, w } of neighborsOf(u)) {
       const candidate = (dist as Record<string, number>)[u] + w
@@ -871,21 +887,29 @@ function plainQueueSteps(): Step<PlainQueueState>[] {
       if (candidate < old) {
         ;(dist as Record<string, number>)[v] = candidate
         queue.push(v)
-        steps.push({
-          state: snap({ current: u, relaxEdge: [u, v], improved: true, flashNode: v }),
-          description: `  Check #${relaxChecks}: ${u}–${v} (toll ${w}): ${candidate} < ${fmt(old)} — improve dist[${v}] to ${candidate}, re-queue ${v}.`,
-          codeLine: 5,
-        })
+        improvements.push({ v, w, candidate, oldDist: old })
       } else {
-        // Only show a no-improvement step when it's instructive (second pass wasted work)
-        if (isDuplicate) {
-          steps.push({
-            state: snap({ current: u, relaxEdge: [u, v], improved: false }),
-            description: `  Check #${relaxChecks}: ${u}–${v} (toll ${w}): ${candidate} ≥ ${fmt(old)} — no improvement. Wasted work: this check existed only because ${u} was popped with a stale distance.`,
-            codeLine: 4,
-          })
-        }
+        noImproves.push({ v, w, candidate, oldDist: old })
       }
+    }
+
+    // Emit improvement steps — always show these (they change state)
+    for (const { v, w, candidate, oldDist } of improvements) {
+      steps.push({
+        state: snap({ current: u, relaxEdge: [u, v], improved: true, flashNode: v }),
+        description: `  ${u}–${v} (toll ${w}): ${candidate} < ${fmt(oldDist)} — improve dist[${v}] to ${candidate}, re-queue ${v}.`,
+        codeLine: 5,
+      })
+    }
+
+    // For true duplicate pops, show one summarised wasted-work step (not one per edge)
+    if (isDuplicate && noImproves.length > 0) {
+      const checksDesc = noImproves.map(({ v, w }) => `${u}–${v}(${w})`).join(', ')
+      steps.push({
+        state: snap({ current: u, relaxEdge: [u, noImproves[0].v], improved: false }),
+        description: `  Wasted re-checks (${noImproves.length}): ${checksDesc} — all ≥ current best. These ${noImproves.length} checks exist only because ${u} was re-queued with a stale distance.`,
+        codeLine: 4,
+      })
     }
   }
 
@@ -918,8 +942,8 @@ function PlainQueueViz({ step }: { step: Step<PlainQueueState> }) {
       flashNode={flashNode}
       done={done}
       legend={[
-        { tone: 'mint', label: 'current / improved' },
-        { tone: 'amber', label: 'edge being relaxed' },
+        { tone: 'mint', label: 'current / relaxation improves a distance' },
+        { tone: 'amber', label: 're-check finds no improvement' },
         { label: 'queued or unreached' },
       ]}
     />
