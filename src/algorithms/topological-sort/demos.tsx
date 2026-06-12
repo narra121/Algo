@@ -169,6 +169,9 @@ function naiveDemoSteps(): Step<NaiveState>[] {
     [['A', 'B', 'C', 'D', 'E', 'G', 'F'], 'almost — G appears before F but F → G requires F first; broken'],
   ]
 
+  // checksSoFar starts at 1 (the intro sentinel above is conceptually "perm 0 / intro").
+  // Each iteration increments BEFORE use, so the first real perm is displayed as #2.
+  // This is intentional: perm #1 is the intro/count sentinel, not a curated permutation.
   let checksSoFar = 1
   for (const [perm, note] of permsToShow) {
     checksSoFar++
@@ -237,7 +240,8 @@ export const naiveDemo: AttemptDemo<NaiveState> = { generateSteps: naiveDemoStep
    Demo 2 — Attempt 1: Sort by prerequisite count (verdict: fail)
    Counts: A:0, B:0, C:1, F:1, D:2, E:2, G:2
    Sorted (ties arbitrary): A, B, C, F, G, D, E
-   Broken example from breaks: puts G before E AND E before D → arrows E→G, D→E violated.
+   Broken example from breaks: puts G before E → arrow E→G violated.
+   Note: D→E is NOT violated (D at position 6, E at position 7 — D precedes E).
 
    codeLine indexes journey[0].pseudocode:
      0: 'count[v] ← number of arrows into v'
@@ -279,29 +283,64 @@ function prereqCountSteps(): Step<PrereqCountState>[] {
     codeLine: 0,
   })
 
-  // Step 2: Sort — show the resulting order A, B, C, F, G, D, E
-  const sortedOrder: NodeId[] = ['A', 'B', 'C', 'F', 'G', 'D', 'E']
+  // Step 2: Place A (count 0)
   steps.push({
-    state: prereqCountSnap(sortedOrder, 'sorted by count: A(0) B(0) C(1) F(1) G(2) D(2) E(2)'),
-    description: `Sort ascending by count: A (0), B (0), then C and F (both 1), then D, E, G (all 2). When multiple courses share a count the sort can emit them in any order. Here it produces: A → B → C → F → G → D → E.`,
+    state: prereqCountSnap(['A'], 'place A (count 0) — first in sort'),
+    description: `A (Intro to CS) has count 0 — no arrows point into it at all. It goes first.`,
     codeLine: 1,
   })
 
-  // Step 3: Reveal the broken arrow E→G
+  // Step 3: Place B (count 0)
+  steps.push({
+    state: prereqCountSnap(['A', 'B'], 'place B (count 0) — tied with A'),
+    description: `B (Calculus) also has count 0. Two courses tie at the front; the sort emits B next. Order so far: A, B.`,
+    codeLine: 1,
+  })
+
+  // Step 4: Place C (count 1)
+  steps.push({
+    state: prereqCountSnap(['A', 'B', 'C'], 'place C (count 1)'),
+    description: `C (Data Structures) and F (Databases) both have count 1. The sort picks C first — ties are broken arbitrarily. Order so far: A, B, C.`,
+    codeLine: 1,
+  })
+
+  // Step 5: Place F (count 1)
+  steps.push({
+    state: prereqCountSnap(['A', 'B', 'C', 'F'], 'place F (count 1) — other count-1 course'),
+    description: `F (Databases) is the other count-1 course. It follows C. Order so far: A, B, C, F.`,
+    codeLine: 1,
+  })
+
+  // Step 6: Three-way tie at count 2 — sort emits G, D, E (arbitrary tie-break)
+  const sortedOrder: NodeId[] = ['A', 'B', 'C', 'F', 'G', 'D', 'E']
+  steps.push({
+    state: prereqCountSnap(sortedOrder, 'three-way tie: D, E, G all count 2 — tie-break is arbitrary'),
+    description: `D (Discrete Math), E (Algorithms), and G (Capstone) all have count 2 — a three-way tie. The sort is free to emit them in any order. Here it produces G, D, E (alphabetical, say). Final sorted order: A, B, C, F, G, D, E.`,
+    codeLine: 1,
+  })
+
+  // Step 7: Show the full result
+  steps.push({
+    state: prereqCountSnap(sortedOrder, 'sorted by count: A(0) B(0) C(1) F(1) G(2) D(2) E(2)'),
+    description: `The complete sorted list: A → B → C → F → G → D → E. This is what the algorithm returns. Now check whether every arrow still points forward in this order.`,
+    codeLine: 2,
+  })
+
+  // Step 8: Reveal the broken arrow E→G
   steps.push({
     state: prereqCountSnap(sortedOrder, 'checking arrow E → G …'),
     description: `Check arrow E → G: in our sorted list G sits at position 5 and E at position 7. G comes BEFORE E — that violates E → G (Algorithms must come before Capstone). The ordering is wrong.`,
     codeLine: 2,
   })
 
-  // Step 4: Reveal the broken arrow D→E
+  // Step 9: Note that D→E is NOT violated
   steps.push({
-    state: prereqCountSnap(sortedOrder, 'checking arrow D → E …'),
-    description: `Check arrow D → E: D is at position 6, E at position 7 — D does come before E here, but that was accidental. The three-way tie at count=2 (D, E, G) is what creates trouble: a static count can't see that G sits at the end of a long chain A → C → E → G, while D is only two hops deep.`,
+    state: prereqCountSnap(sortedOrder, 'checking arrow D → E — D before E here'),
+    description: `Check arrow D → E: D is at position 6, E at position 7 — D does come before E here, so that arrow is satisfied. But the three-way tie at count=2 (D, E, G) is what created the trouble in the first place: a static count can't see that G sits at the end of the long chain A → C → E → G, while D is only two hops deep.`,
     codeLine: 2,
   })
 
-  // Step 5: Counterexample verdict
+  // Step 10: Counterexample verdict
   steps.push({
     state: prereqCountSnap(sortedOrder, 'FAIL · G before E violates E → G'),
     description: `Counterexample confirmed: the counts are A:0, B:0, C:1, F:1, D:2, E:2, G:2 — a three-way tie lets the sort place G (Capstone) before E (Algorithms), immediately breaking E → G. A static count can't see depth; you need to know which prerequisites are already DONE, not just how many there are.`,

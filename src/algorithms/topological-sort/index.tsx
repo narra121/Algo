@@ -248,7 +248,7 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
       space: 'O(V)',
       verdict: 'fail',
       breaks:
-        "The counts here are A:0, B:0, C:1, F:1, D:2, E:2, G:2 — so D, E and G are a three-way tie, and the sort is free to emit A, B, C, F, G, D, E. That puts G (Capstone) before E (Algorithms) AND E before D (Discrete Math), breaking the arrows E → G and D → E. A static count can't see depth: G sits at the end of the chain A → C → E → G, yet its number looks identical to D's.",
+        "The counts here are A:0, B:0, C:1, F:1, D:2, E:2, G:2 — so D, E and G are a three-way tie, and the sort is free to emit A, B, C, F, G, D, E. That puts G (Capstone) before E (Algorithms), breaking the arrow E → G. A static count can't see depth: G sits at the end of the chain A → C → E → G, yet its number looks identical to D's.",
       insight:
         "Readiness isn't about how many prerequisites a course HAS — it's about which ones are already DONE. The order has to be built incrementally, checking completion as you go.",
       demo: prereqCountDemo,
