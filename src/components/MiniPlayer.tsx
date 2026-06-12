@@ -74,8 +74,8 @@ function MiniPlayerBody({
       <div className="viz-stage">
         <Visualizer step={player.step} />
       </div>
-      <VariablesPanel vars={player.step.vars} />
       <PlayerControls player={player} />
+      <VariablesPanel vars={player.step.vars} />
       <Narration key={player.index} text={player.step.description} />
     </div>
   )

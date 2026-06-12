@@ -404,11 +404,13 @@ button {
 
 .vars-panel {
   width: 100%;
-  margin-bottom: 12px;
+  margin-top: 12px;
   padding: 10px 12px;
   background: rgba(10, 15, 34, 0.6);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
+  /* reserve one chip row so wrap changes don't shift the narration below */
+  min-height: 48px;
 }
 
 .vars-grid {
@@ -466,7 +468,7 @@ button {
 }
 
 .mini-player .vars-panel {
-  margin-bottom: 0;
+  margin-top: 0;
 }
 
 /* ---------- problem card & aha banner ---------- */

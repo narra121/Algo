@@ -111,8 +111,8 @@ export function AlgorithmPage({ algo, onBack }: { algo: AlgorithmModule; onBack:
           <div className="viz-stage">
             <Visualizer step={player.step} />
           </div>
-          <VariablesPanel vars={player.step.vars} />
           <PlayerControls player={player} />
+          <VariablesPanel vars={player.step.vars} />
           <div style={{ height: 14 }} />
           <Narration key={player.index} text={player.step.description} />
         </section>
