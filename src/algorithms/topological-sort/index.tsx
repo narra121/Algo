@@ -1,32 +1,9 @@
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
+import { naiveDemo, prereqCountDemo, rescanDemo } from './demos'
+import { NODES, EDGES, NAME, POS, R } from './data'
+import type { NodeId } from './data'
 
 /* Canonical example: Kahn's algorithm on a 7-course prerequisite DAG. */
-
-type NodeId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G'
-
-const NODES: NodeId[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
-
-const NAME: Record<NodeId, string> = {
-  A: 'Intro to CS',
-  B: 'Calculus',
-  C: 'Data Structures',
-  D: 'Discrete Math',
-  E: 'Algorithms',
-  F: 'Databases',
-  G: 'Capstone',
-}
-
-/** prerequisite → dependent: an arrow u → v means "u must come before v". */
-const EDGES: { from: NodeId; to: NodeId }[] = [
-  { from: 'A', to: 'C' },
-  { from: 'A', to: 'D' },
-  { from: 'B', to: 'D' },
-  { from: 'C', to: 'E' },
-  { from: 'C', to: 'F' },
-  { from: 'D', to: 'E' },
-  { from: 'E', to: 'G' },
-  { from: 'F', to: 'G' },
-]
 
 interface TopoState {
   /** Current in-degree (pending prerequisites) of every course. */
@@ -63,17 +40,31 @@ function generateSteps(): Step<TopoState>[] {
     done,
   })
 
+  const fmtDeg = () => `{${NODES.map((n) => `${n}:${inDeg[n]}`).join(', ')}}`
+  const mkVars = (u: NodeId | null, changed: string[], preInit = false): VarEntry[] => {
+    const ch = new Set(changed)
+    return [
+      { name: 'in-degree{}', value: fmtDeg(), changed: ch.has('in-degree') },
+      { name: 'queue', value: preInit ? '—' : `[${queue.join(', ')}]`, changed: ch.has('queue') },
+      { name: 'order', value: preInit ? '—' : `[${order.join(', ')}]`, changed: ch.has('order') },
+      { name: 'u', value: u ?? '—', changed: ch.has('u') },
+      { name: 'edges removed', value: `${removed.length}/${EDGES.length}`, changed: ch.has('removed') },
+    ]
+  }
+
   steps.push({
     state: snap(null, null),
     description: `Goal: line up all 7 courses so every prerequisite arrow points forward. Start by counting incoming arrows for every course: A and B have 0 pending prerequisites, C and F have 1, while D, E and G are blocked by 2 each. An in-degree is just "how many things must happen before me".`,
     codeLine: 0,
+    vars: mkVars(null, ['in-degree'], true),
   })
 
   for (const id of NODES) if (inDeg[id] === 0) queue.push(id)
   steps.push({
     state: snap(null, null),
-    description: `Seed the queue with every course nobody is waiting on: A (${NAME.A}) and B (${NAME.B}). They are safe to take RIGHT NOW — no arrow points into them, so scheduling them first can't violate anything.`,
+    description: `Seed the queue with every course nobody is waiting on: A (${NAME.A}) and B (${NAME.B}). They are safe to take RIGHT NOW — no arrow points into them, so scheduling them first can't violate anything. The order starts empty.`,
     codeLine: 1,
+    vars: mkVars(null, ['queue', 'order']),
   })
 
   while (queue.length > 0) {
@@ -88,6 +79,7 @@ function generateSteps(): Step<TopoState>[] {
       state: snap(u, null),
       description: `Dequeue ${u} (${NAME[u]}) — its in-degree is 0, meaning every prerequisite it ever had is already in the order. It becomes course #${order.length}.${unlockNote}`,
       codeLine: 4,
+      vars: mkVars(u, ['u', 'queue', 'order']),
     })
 
     for (const e of outgoing) {
@@ -100,12 +92,14 @@ function generateSteps(): Step<TopoState>[] {
           state: snap(u, e.i),
           description: `Delete edge ${u} → ${e.to}: ${e.to}'s in-degree drops ${before} → 0. That was the LAST thing blocking ${e.to} (${NAME[e.to]}) — it's fully unlocked and joins the queue.`,
           codeLine: 7,
+          vars: mkVars(u, ['in-degree', 'removed', 'queue']),
         })
       } else {
         steps.push({
           state: snap(u, e.i),
           description: `Delete edge ${u} → ${e.to}: one of ${e.to}'s prerequisites is satisfied, so its in-degree drops ${before} → ${inDeg[e.to]}. Still ${inDeg[e.to]} pending — ${e.to} (${NAME[e.to]}) stays locked for now.`,
           codeLine: 6,
+          vars: mkVars(u, ['in-degree', 'removed']),
         })
       }
     }
@@ -115,23 +109,13 @@ function generateSteps(): Step<TopoState>[] {
     state: snap(null, null, true),
     description: `Queue empty and all ${order.length} of ${NODES.length} courses placed: ${order.join(' → ')}. Every arrow points forward in this list — and it took just ${order.length} dequeues + ${EDGES.length} edge deletions = ${order.length + EDGES.length} operations, versus checking up to 5,040 permutations by brute force. Had we finished with fewer than 7, the leftovers would all be waiting on each other — a cycle, and no valid order exists.`,
     codeLine: 8,
+    vars: mkVars(null, []),
   })
 
   return steps
 }
 
 /* ---------- fixed left-to-right layered layout ---------- */
-
-const R = 20
-const POS: Record<NodeId, { x: number; y: number }> = {
-  A: { x: 60, y: 70 },
-  B: { x: 60, y: 170 },
-  C: { x: 210, y: 70 },
-  D: { x: 210, y: 170 },
-  F: { x: 360, y: 70 },
-  E: { x: 360, y: 170 },
-  G: { x: 510, y: 120 },
-}
 
 function edgeGeom(from: NodeId, to: NodeId) {
   const a = POS[from]
@@ -245,6 +229,7 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
       space: 'O(n)',
       issues:
         'Thousands of permutations share the same fatal early mistake — Capstone scheduled first dooms 720 orderings at once — yet each one is generated and checked independently, because the enumeration never learns WHY an ordering failed. Factorial growth is merciless: 20 courses means 2.4 quintillion permutations. Kahn\'s algorithm reads the answer straight off the in-degrees and finishes this instance in 15 operations: 7 dequeues + 8 edge deletions.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -266,6 +251,7 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
         "The counts here are A:0, B:0, C:1, F:1, D:2, E:2, G:2 — so D, E and G are a three-way tie, and the sort is free to emit A, B, C, F, G, D, E. That puts G (Capstone) before E (Algorithms) AND E before D (Discrete Math), breaking the arrows E → G and D → E. A static count can't see depth: G sits at the end of the chain A → C → E → G, yet its number looks identical to D's.",
       insight:
         "Readiness isn't about how many prerequisites a course HAS — it's about which ones are already DONE. The order has to be built incrementally, checking completion as you go.",
+      demo: prereqCountDemo,
     },
     {
       title: 'Simulate semesters — re-scan for any course whose prerequisites are all done',
@@ -285,6 +271,7 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
         "Correct — it finds A, B → C, D → E, F → G in 4 passes. But count the work: pass 1 checks 7 courses against all 8 arrows (56 looks), pass 2 checks 5 (40), pass 3 checks 3 (24), pass 4 checks 1 (8) — 128 arrow-checks to place 7 courses, versus 15 operations for Kahn's. Worse, the re-scans are pure polling: G gets re-examined every single pass even though nothing about it changed until E and F finished.",
       insight:
         'The ONLY event that can unlock a course is one of its prerequisites finishing. So stop asking every course every pass — let each finished course push the news to its dependents directly.',
+      demo: rescanDemo,
     },
     {
       title: "Kahn's algorithm — count down in-degrees, queue whatever hits 0",
@@ -293,11 +280,13 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
       pseudocode: [
         'compute in-degree of every node',
         'queue ← all nodes with in-degree 0',
+        'order ← []',
         'while queue not empty:',
         '    u ← dequeue(queue); append u to order',
         '    for each edge u → v:',
-        '        in-degree[v] ← in-degree[v] − 1; if 0: enqueue v',
-        'if |order| = n: return order — else: cycle',
+        '        in-degree[v] ← in-degree[v] − 1',
+        '        if in-degree[v] = 0: enqueue v',
+        'if |order| = n: return order   — else: cycle, no valid order',
       ],
       time: 'O(V + E)',
       space: 'O(V)',
@@ -306,6 +295,7 @@ export const topologicalSort: AlgorithmModule<TopoState> = {
         "Nothing is wasted now: each of the 7 courses enters the queue exactly once (the single moment its counter hits 0), and each of the 8 arrows is deleted exactly once, when its source is placed. That's 7 dequeues + 8 decrements = 15 operations total — no course is ever re-examined, unlike the 128 polling checks, and no ordering is ever guessed, unlike the 5,040 permutations.",
       insight:
         'A counter hitting 0 is a PROOF that every prerequisite is already behind us — which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
