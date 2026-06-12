@@ -1,4 +1,4 @@
-import type { AttemptDemo, Step } from '../../core/types'
+import type { AttemptDemo, Step, VarEntry } from '../../core/types'
 import { NODES, EDGES, POS, SOURCE, neighborsOf } from './data'
 import type { NodeId } from './data'
 
@@ -143,8 +143,8 @@ function GraphRenderer({
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Demo 1 — Naive brute force: enumerate ALL simple paths from A
-   42 total simple paths; 13 to F. Show 10 paths then truncate + verdict.
-   Total steps: 13 (intro + 10 paths + truncation + verdict).
+   42 non-trivial simple paths; 13 end at F. Every single one is walked.
+   Total steps: 44 (intro + 42 paths + verdict).
 
    codeLine indexes problem.naive.pseudocode:
      0: 'best[v] ← ∞ for every town v'
@@ -164,8 +164,13 @@ interface NaiveState {
   done: boolean
 }
 
-const NAIVE_PATHS_TOTAL = 42
-const NAIVE_PATHS_TO_F = 13
+/** Toll on the road u–v (graph is undirected). */
+function edgeWeight(u: NodeId, v: NodeId): number {
+  for (const [a, b, w] of EDGES) {
+    if ((a === u && b === v) || (a === v && b === u)) return w
+  }
+  return 0
+}
 
 /** Collect all simple paths from SOURCE by DFS. */
 function collectAllPaths(): Array<{ path: NodeId[]; cost: number }> {
@@ -187,31 +192,61 @@ function collectAllPaths(): Array<{ path: NodeId[]; cost: number }> {
 function naiveSteps(): Step<NaiveState>[] {
   const steps: Step<NaiveState>[] = []
 
+  const runBest: Record<NodeId, number> = { A: 0, B: Infinity, C: Infinity, D: Infinity, E: Infinity, F: Infinity }
+
+  const bestStr = () =>
+    `{${NODES.map((n) => `${n}:${fmt((runBest as Record<string, number>)[n])}`).join(', ')}}`
+
+  /** Same four variables, same order, every step; `changed` lists names this step assigned. */
+  const makeVars = (o: { path?: NodeId[]; cost?: number; walked: number; changed?: string[] }): VarEntry[] => {
+    const ch = new Set(o.changed ?? [])
+    return [
+      { name: 'path', value: o.path && o.path.length > 0 ? o.path.join('→') : '—', changed: ch.has('path') },
+      { name: 'cost', value: o.cost != null ? String(o.cost) : '—', changed: ch.has('cost') },
+      { name: 'best', value: bestStr(), changed: ch.has('best') },
+      { name: 'paths walked', value: String(o.walked), changed: ch.has('paths walked') },
+    ]
+  }
+
+  const allPaths = collectAllPaths()
+  const nonTrivial = allPaths.filter(p => p.path.length > 1)
+  const pathsToF = nonTrivial.filter(p => p.path[p.path.length - 1] === 'F').length
+
   // Intro
   steps.push({
     state: {
-      best: { A: 0, B: Infinity, C: Infinity, D: Infinity, E: Infinity, F: Infinity },
+      best: { ...runBest },
       currentPath: [],
       currentCost: 0,
       pathsExplored: 0,
       done: false,
     },
-    description: `Brute force: walk every simple path from ${SOURCE} and track a running best cost per destination. This tiny 6-node graph hides ${NAIVE_PATHS_TOTAL} simple paths — ${NAIVE_PATHS_TO_F} different routes to F alone. Initialise best[${SOURCE}]=0, all others ∞. Begin the recursive walk.`,
+    description: `Brute force: walk every simple path from ${SOURCE} and track a running best cost per destination. This tiny 6-node graph hides ${nonTrivial.length} simple paths — ${pathsToF} different routes to F alone. Initialise best[${SOURCE}]=0, all others ∞. Begin the recursive walk.`,
     codeLine: 0,
+    vars: makeVars({ walked: 0, changed: ['best'] }),
   })
 
-  const allPaths = collectAllPaths()
-  const nonTrivial = allPaths.filter(p => p.path.length > 1)
-  const SHOW = 10
-
-  const runBest: Record<NodeId, number> = { A: 0, B: Infinity, C: Infinity, D: Infinity, E: Infinity, F: Infinity }
-
-  for (let i = 0; i < Math.min(SHOW, nonTrivial.length); i++) {
+  let prevPath: NodeId[] = []
+  for (let i = 0; i < nonTrivial.length; i++) {
     const { path, cost } = nonTrivial[i]
     const dest = path[path.length - 1]
     const old = (runBest as Record<string, number>)[dest]
     const improved = cost < old
     if (improved) (runBest as Record<string, number>)[dest] = cost
+
+    // Real toll arithmetic for THIS path, e.g. "2+1+5 = 8".
+    const tolls = path.slice(1).map((n, k) => edgeWeight(path[k], n))
+    const arith = tolls.length > 1 ? `${tolls.join('+')} = ${cost}` : `${cost}`
+
+    // How much of this path is a re-priced copy of the previous one.
+    let shared = 0
+    while (shared < path.length && shared < prevPath.length && path[shared] === prevPath[shared]) shared++
+    let prefixNote = ''
+    if (shared >= 2) {
+      const prefixCost = tolls.slice(0, shared - 1).reduce((a, b) => a + b, 0)
+      prefixNote = ` The prefix ${path.slice(0, shared).join('→')} (toll ${prefixCost}) was just re-summed from scratch — the same roads priced yet again.`
+    }
+    prevPath = path
 
     steps.push({
       state: {
@@ -222,39 +257,33 @@ function naiveSteps(): Step<NaiveState>[] {
         done: false,
       },
       description:
-        `Path ${i + 1}: ${path.join(' → ')} (toll ${cost}). ${
+        `Path ${i + 1} of ${nonTrivial.length}: ${path.join(' → ')} (toll ${arith}). ${
           improved
-            ? `New best for ${dest}! best[${dest}] = ${cost}.`
-            : `best[${dest}] stays ${(runBest as Record<string, number>)[dest]} — ${cost} is not cheaper.`
-        } The shared prefix A→C was re-summed from scratch once more.`,
+            ? `New best for ${dest}: ${fmt(old)} → ${cost}.`
+            : `best[${dest}] stays ${fmt(old)} — ${cost} is not cheaper.`
+        }${prefixNote}`,
       codeLine: improved ? 2 : 3,
+      vars: makeVars({
+        path,
+        cost,
+        walked: i + 1,
+        changed: improved ? ['path', 'cost', 'best', 'paths walked'] : ['path', 'cost', 'paths walked'],
+      }),
     })
   }
 
-  // Truncation step
+  // Verdict step — real totals, AFTER every path was actually shown.
   steps.push({
     state: {
-      best: { A: 0, B: 3, C: 2, D: 8, E: 7, F: 10 },
-      currentPath: [],
-      currentCost: 0,
-      pathsExplored: NAIVE_PATHS_TOTAL,
-      done: false,
-    },
-    description: `…and so on — all ${NAIVE_PATHS_TOTAL} simple paths walked, ${NAIVE_PATHS_TO_F} of them ending at F. Every shared prefix (A→C, A→C→B, …) is re-priced on every path that contains it; nothing is ever declared finished. The path count explodes factorially with more towns.`,
-    codeLine: 5,
-  })
-
-  // Verdict step
-  steps.push({
-    state: {
-      best: { A: 0, B: 3, C: 2, D: 8, E: 7, F: 10 },
+      best: { ...runBest },
       currentPath: ['A', 'C', 'E', 'F'],
       currentCost: 10,
-      pathsExplored: NAIVE_PATHS_TOTAL,
+      pathsExplored: nonTrivial.length,
       done: true,
     },
-    description: `Done. True shortest costs: A=0, B=3, C=2, D=8, E=7, F=10. Best route to F: A→C→E→F at cost 10 — but the search ground through all ${NAIVE_PATHS_TO_F} routes to F before confirming it. Dijkstra answers with 6 pops and 9 edge checks; no path is ever re-walked.`,
+    description: `Done — all ${nonTrivial.length} simple paths walked to the end. True shortest costs: ${NODES.map((n) => `${n}=${fmt((runBest as Record<string, number>)[n])}`).join(', ')}. Best route to F: A→C→E→F at cost 10 — confirmed only after grinding through all ${pathsToF} routes to F; Dijkstra answers with 6 pops and 9 edge checks, never re-walking a path.`,
     codeLine: 6,
+    vars: makeVars({ path: ['A', 'C', 'E', 'F'], cost: 10, walked: nonTrivial.length }),
   })
 
   return steps
@@ -380,8 +409,8 @@ export const naiveDemo: AttemptDemo<NaiveState> = { generateSteps: naiveSteps, V
    BFS visit order: A(0), B(4 via A), C(2 via A), D(9 via B), E(7 via C), F(15 via D).
    Counterexample: B stamped at 4, true best is 3 (A→C→B = 2+1).
    D stamped at 9, true best is 8 (A→C→B→D).
-   Key steps only — show each node being stamped + 2 already-seen rejections + verdict.
-   Total steps: ~13.
+   Full trace — every pop and every one of the 18 edge checks is shown.
+   Total steps: 26 (intro + 6 pops + 18 edge checks + verdict).
 
    codeLine indexes journey[0].pseudocode:
      0: 'dist[A] ← 0; queue ← {A}'
@@ -421,56 +450,64 @@ function bfsSteps(): Step<BfsState>[] {
     ...partial,
   })
 
+  const distStr = () => `{${NODES.map((n) => `${n}:${fmt((dist as Record<string, number>)[n])}`).join(', ')}}`
+  const seenStr = () => `{${seen.join(', ')}}`
+  const queueStr = () => `[${queue.join(', ')}]`
+
+  /** Same six variables, same order, every step; `changed` lists names this step assigned. */
+  const makeVars = (o: { u?: NodeId | null; edge?: readonly [NodeId, NodeId] | null; w?: number | null; changed?: string[] }): VarEntry[] => {
+    const ch = new Set(o.changed ?? [])
+    return [
+      { name: 'u', value: o.u ?? '—', changed: ch.has('u') },
+      { name: 'dist', value: distStr(), changed: ch.has('dist') },
+      { name: 'seen', value: seenStr(), changed: ch.has('seen') },
+      { name: 'queue', value: queueStr(), changed: ch.has('queue') },
+      { name: '(u, v)', value: o.edge ? `${o.edge[0]}–${o.edge[1]}` : '—', changed: ch.has('(u, v)') },
+      { name: 'w', value: o.w != null ? String(o.w) : '—', changed: ch.has('w') },
+    ]
+  }
+
   // Intro
   steps.push({
     state: snap({}),
     description: `BFS explores towns one hop at a time and stamps each town on first arrival — permanently. That works perfectly when every road has the same toll. Here it does not. Initialise dist[A]=0, queue=[A].`,
     codeLine: 0,
+    vars: makeVars({ changed: ['dist', 'seen', 'queue'] }),
   })
 
-  // Simulate BFS, emitting only meaningful steps:
-  // - pop step for each node
-  // - stamp step for each newly-seen neighbour
-  // - ONE skip step per node (prefer the instructive isCheaper skip over any plain skip)
+  // Full BFS trace: a pop step for each node, then one step per edge check —
+  // every stamp AND every already-seen rejection, with real values.
   while (queue.length > 0) {
     const u = queue.shift()!
 
     steps.push({
-      state: snap({ current: u, queue: [...queue] }),
-      description: `Dequeue ${u} (dist[${u}]=${dist[u]}). Check its roads.`,
+      state: snap({ current: u }),
+      description: `Dequeue ${u} (dist[${u}]=${dist[u]}). Check each of its ${neighborsOf(u).length} roads in turn.`,
       codeLine: 2,
+      vars: makeVars({ u, changed: ['u', 'queue'] }),
     })
 
-    // Collect all seen-skips for this node first so we can pick the instructive one
-    const seenSkips: Array<{ v: NodeId; w: number; candidate: number; isCheaper: boolean }> = []
     for (const { v, w } of neighborsOf(u)) {
       const candidate = (dist as Record<string, number>)[u] + w
-      const firstTime = !seen.includes(v)
-      if (firstTime) {
+      if (!seen.includes(v)) {
         ;(dist as Record<string, number>)[v] = candidate
         seen.push(v)
         queue.push(v)
         steps.push({
           state: snap({ current: u, examiningEdge: [u, v], accepted: true }),
-          description: `${u}–${v} (toll ${w}): ${v} never seen — stamp dist[${v}]=${candidate} and enqueue. First arrival is final; ${v} will never be revisited${candidate === 9 && v === 'D' ? ' — even though A→C→B→D = 8 is cheaper' : ''}.`,
+          description: `${u}–${v} (toll ${w}): ${v} never seen — stamp dist[${v}] = ${dist[u]} + ${w} = ${candidate} and enqueue. First arrival is final; ${v} will never be revisited${candidate === 9 && v === 'D' ? ' — even though A→C→B→D = 8 is cheaper' : ''}.`,
           codeLine: 4,
+          vars: makeVars({ u, edge: [u, v], w, changed: ['dist', 'seen', 'queue', '(u, v)', 'w'] }),
         })
       } else {
         const isCheaper = candidate < (dist as Record<string, number>)[v]
-        seenSkips.push({ v, w, candidate, isCheaper })
+        steps.push({
+          state: snap({ current: u, examiningEdge: [u, v], accepted: false }),
+          description: `${u}–${v} (toll ${w}): ${v} already seen at dist[${v}]=${(dist as Record<string, number>)[v]}. BFS ignores it — ${isCheaper ? `even though ${dist[u]} + ${w} = ${candidate} would be CHEAPER than ${(dist as Record<string, number>)[v]}. This is exactly where BFS goes wrong.` : `${candidate} is no cheaper, so nothing is lost on this particular road.`}`,
+          codeLine: 4,
+          vars: makeVars({ u, edge: [u, v], w, changed: ['(u, v)', 'w'] }),
+        })
       }
-    }
-
-    // Show one skip per node: prefer the instructive cheaper-but-ignored skip if any
-    const skipToShow =
-      seenSkips.find(s => s.isCheaper) ?? seenSkips[0] ?? null
-    if (skipToShow) {
-      const { v, w, candidate, isCheaper } = skipToShow
-      steps.push({
-        state: snap({ current: u, examiningEdge: [u, v], accepted: false }),
-        description: `${u}–${v} (toll ${w}): ${v} already seen at dist[${v}]=${(dist as Record<string, number>)[v]}. BFS skips it — ${isCheaper ? `even though ${candidate} would be CHEAPER. This is where BFS goes wrong.` : 'no cheaper route here.'}`,
-        codeLine: 4,
-      })
     }
   }
 
@@ -479,6 +516,7 @@ function bfsSteps(): Step<BfsState>[] {
     state: snap({ done: true, verdict: true }),
     description: `BFS result: A=0, B=4, C=2, D=9, E=7, F=15. Correct distances: B=3, D=8, F=10. BFS stamped B=4 via one-hop A–B and locked it — it missed the cheaper two-hop A→C→B = 2+1 = 3. D inherited stale B: 4+5=9 instead of 3+5=8. F followed: 9+6=15 instead of 10. On a weighted map, fewer roads is not cheaper roads.`,
     codeLine: -1,
+    vars: makeVars({}),
   })
 
   return steps
@@ -643,10 +681,27 @@ function greedyWalkSteps(): Step<GreedyWalkState>[] {
     ...partial,
   })
 
+  const distStr = () => `{${NODES.map((n) => `${n}:${fmt((dist as Record<string, number>)[n])}`).join(', ')}}`
+  const visitedStr = () => `{${visited.join(', ')}}`
+
+  /** Same six variables, same order, every step; `changed` lists names this step assigned. */
+  const makeVars = (o: { road?: readonly [NodeId, NodeId] | null; w?: number | null; changed?: string[] }): VarEntry[] => {
+    const ch = new Set(o.changed ?? [])
+    return [
+      { name: 'at', value: cur, changed: ch.has('at') },
+      { name: 'cost', value: String(totalCost), changed: ch.has('cost') },
+      { name: 'visited', value: visitedStr(), changed: ch.has('visited') },
+      { name: 'dist', value: distStr(), changed: ch.has('dist') },
+      { name: 'road', value: o.road ? `${o.road[0]}–${o.road[1]}` : '—', changed: ch.has('road') },
+      { name: 'w', value: o.w != null ? String(o.w) : '—', changed: ch.has('w') },
+    ]
+  }
+
   steps.push({
     state: snap({}),
     description: `Greedy walk: stand at ${SOURCE}, always take the cheapest unvisited road available. Record each town's toll as we arrive. Start at ${SOURCE} with accumulated cost 0.`,
     codeLine: 0,
+    vars: makeVars({ changed: ['at', 'cost', 'visited', 'dist'] }),
   })
 
   while (true) {
@@ -667,6 +722,7 @@ function greedyWalkSteps(): Step<GreedyWalkState>[] {
       state: snap({ examiningEdge: [cur, nxt] }),
       description: `At ${cur} (cost ${totalCost}). Options: ${opts}. Cheapest is ${cur}–${nxt} (toll ${w}) — commit.${snubMsg}`,
       codeLine: 2,
+      vars: makeVars({ road: [cur, nxt], w, changed: ['road', 'w'] }),
     })
 
     const prev = cur
@@ -679,6 +735,7 @@ function greedyWalkSteps(): Step<GreedyWalkState>[] {
       state: snap({ pickedEdge: [prev, cur] }),
       description: `Arrived at ${cur}. Accumulated toll: ${totalCost}. Stamped dist[${cur}]=${totalCost}. The walker never doubles back.`,
       codeLine: 3,
+      vars: makeVars({ road: [prev, cur], w, changed: ['at', 'cost', 'visited', 'dist'] }),
     })
   }
 
@@ -687,6 +744,7 @@ function greedyWalkSteps(): Step<GreedyWalkState>[] {
     state: snap({ done: true, verdict: true }),
     description: `Walk complete: A=0, C=2, B=3, D=8, E=10, F=13. E's true cheapest is 7 — the direct A→C→E = 2+5 was snubbed at C in favour of the cheaper single road C–B (toll 1). Optimising each step lost the better total: E is stamped at 10 instead of 7, and F at 13 instead of 10.`,
     codeLine: -1,
+    vars: makeVars({}),
   })
 
   return steps
@@ -809,8 +867,8 @@ export const greedyWalkDemo: AttemptDemo<GreedyWalkState> = { generateSteps: gre
    Demo 4 — Attempt 3: Relax with a plain queue (verdict: partial)
    Simulation: 9 pops, 27 edge checks. B, D, F each processed twice.
    Dijkstra: 6 pops, 9 edge relaxations.
-   Steps: intro + 9 pop steps + up to 15 relax steps (selected improvements +
-   key no-improvements) + verdict = ~25.
+   Full trace — every pop and every one of the 27 edge checks is shown.
+   Steps: intro + 9 pop steps + 27 relax steps + verdict = 38.
 
    codeLine indexes journey[2].pseudocode:
      0: 'dist[A] ← 0; dist[v] ← ∞ for all others; queue ← {A}'
@@ -856,10 +914,28 @@ function plainQueueSteps(): Step<PlainQueueState>[] {
     ...partial,
   })
 
+  const distStr = () => `{${NODES.map((n) => `${n}:${fmt((dist as Record<string, number>)[n])}`).join(', ')}}`
+  const queueStr = () => `[${queue.join(', ')}]`
+
+  /** Same seven variables, same order, every step; `changed` lists names this step assigned. */
+  const makeVars = (o: { u?: NodeId | null; edge?: readonly [NodeId, NodeId] | null; w?: number | null; changed?: string[] }): VarEntry[] => {
+    const ch = new Set(o.changed ?? [])
+    return [
+      { name: 'u', value: o.u ?? '—', changed: ch.has('u') },
+      { name: 'dist', value: distStr(), changed: ch.has('dist') },
+      { name: 'queue', value: queueStr(), changed: ch.has('queue') },
+      { name: '(u, v)', value: o.edge ? `${o.edge[0]}–${o.edge[1]}` : '—', changed: ch.has('(u, v)') },
+      { name: 'w', value: o.w != null ? String(o.w) : '—', changed: ch.has('w') },
+      { name: 'pops', value: String(pops), changed: ch.has('pops') },
+      { name: 'checks', value: String(relaxChecks), changed: ch.has('checks') },
+    ]
+  }
+
   steps.push({
     state: snap({}),
     description: `Plain-queue relaxation: like BFS but allow re-queuing when a shorter route is found. Any improvement re-queues the node so the saving propagates. Start: dist[A]=0, queue=[A].`,
     codeLine: 0,
+    vars: makeVars({ changed: ['dist', 'queue'] }),
   })
 
   while (queue.length > 0) {
@@ -871,52 +947,42 @@ function plainQueueSteps(): Step<PlainQueueState>[] {
     steps.push({
       state: snap({ current: u }),
       description: isDuplicate
-        ? `Pop #${pops}: dequeue ${u} at dist[${u}]=${dist[u]}. Second pass — ${u} was already processed at a stale cost; this is the redundant work a priority queue would eliminate.`
-        : `Pop #${pops}: dequeue ${u} at dist[${u}]=${dist[u]}.`,
+        ? `Pop #${pops}: dequeue ${u} again, now at dist[${u}]=${dist[u]}. Second pass — ${u} was first processed at a stale cost, so every one of its roads must be re-checked; this is the redundant work a priority queue would eliminate.`
+        : `Pop #${pops}: dequeue ${u} at dist[${u}]=${dist[u]}. Relax each of its ${neighborsOf(u).length} roads in turn.`,
       codeLine: 2,
+      vars: makeVars({ u, changed: ['u', 'queue', 'pops'] }),
     })
 
-    // Collect all checks for this pop so we can decide what to emit
-    const improvements: Array<{ v: NodeId; w: number; candidate: number; oldDist: number }> = []
-    const noImproves: Array<{ v: NodeId; w: number; candidate: number; oldDist: number }> = []
-
+    // One honest step per edge check — improvements AND no-improvements alike.
     for (const { v, w } of neighborsOf(u)) {
-      const candidate = (dist as Record<string, number>)[u] + w
       relaxChecks++
+      const candidate = (dist as Record<string, number>)[u] + w
       const old = (dist as Record<string, number>)[v]
       if (candidate < old) {
         ;(dist as Record<string, number>)[v] = candidate
         queue.push(v)
-        improvements.push({ v, w, candidate, oldDist: old })
+        steps.push({
+          state: snap({ current: u, relaxEdge: [u, v], improved: true, flashNode: v }),
+          description: `Check #${relaxChecks}: ${u}–${v} (toll ${w}). ${dist[u]} + ${w} = ${candidate} < ${fmt(old)} — improve dist[${v}] to ${candidate} and re-queue ${v} so the saving propagates.`,
+          codeLine: 5,
+          vars: makeVars({ u, edge: [u, v], w, changed: ['dist', 'queue', '(u, v)', 'w', 'checks'] }),
+        })
       } else {
-        noImproves.push({ v, w, candidate, oldDist: old })
+        steps.push({
+          state: snap({ current: u, relaxEdge: [u, v], improved: false }),
+          description: `Check #${relaxChecks}: ${u}–${v} (toll ${w}). ${dist[u]} + ${w} = ${candidate} ≥ ${fmt(old)} — no improvement; dist[${v}] stays ${fmt(old)}.${isDuplicate ? ` A wasted re-check: it only exists because ${u} was re-queued after its first, stale pass.` : ''}`,
+          codeLine: 4,
+          vars: makeVars({ u, edge: [u, v], w, changed: ['(u, v)', 'w', 'checks'] }),
+        })
       }
-    }
-
-    // Emit improvement steps — always show these (they change state)
-    for (const { v, w, candidate, oldDist } of improvements) {
-      steps.push({
-        state: snap({ current: u, relaxEdge: [u, v], improved: true, flashNode: v }),
-        description: `  ${u}–${v} (toll ${w}): ${candidate} < ${fmt(oldDist)} — improve dist[${v}] to ${candidate}, re-queue ${v}.`,
-        codeLine: 5,
-      })
-    }
-
-    // For true duplicate pops, show one summarised wasted-work step (not one per edge)
-    if (isDuplicate && noImproves.length > 0) {
-      const checksDesc = noImproves.map(({ v, w }) => `${u}–${v}(${w})`).join(', ')
-      steps.push({
-        state: snap({ current: u, relaxEdge: [u, noImproves[0].v], improved: false }),
-        description: `  Wasted re-checks (${noImproves.length}): ${checksDesc} — all ≥ current best. These ${noImproves.length} checks exist only because ${u} was re-queued with a stale distance.`,
-        codeLine: 4,
-      })
     }
   }
 
   steps.push({
     state: snap({ done: true }),
-    description: `Plain queue gets every answer right: A=0, B=3, C=2, D=8, E=7, F=10. But it took ${pops} pops and ${relaxChecks} edge checks. B, D, and F were processed twice — once at stale costs (B=4, D=9, F=15), then again after being improved. Dijkstra needs only 6 pops and 9 edge checks by always popping the closest unsettled town first; with that ordering a town's distance is final on first pop.`,
+    description: `Plain queue gets every answer right: A=0, B=3, C=2, D=8, E=7, F=10. But it took ${pops} pops and ${relaxChecks} edge checks. B, D, and F were each processed twice — once at stale costs (B=4, D=9, F=15), then again after being improved. Dijkstra needs only 6 pops and 9 edge checks by always popping the closest unsettled town first; with that ordering a town's distance is final on first pop.`,
     codeLine: -1,
+    vars: makeVars({}),
   })
 
   return steps

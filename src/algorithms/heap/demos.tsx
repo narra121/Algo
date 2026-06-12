@@ -1,4 +1,4 @@
-import type { AttemptDemo, Step } from '../../core/types'
+import type { AttemptDemo, Step, VarEntry } from '../../core/types'
 import { Cells, Legend, VizCaption } from '../../components/vizPrimitives'
 import { STREAM, K } from './data'
 
@@ -25,16 +25,44 @@ interface NaiveState {
   phase: 'intro' | 'append' | 'sort' | 'read' | 'done'
 }
 
+/**
+ * Live variables for the naive demo, named as in problem.naive.pseudocode.
+ * Same five entries in the same order on every step; `changed` lists the
+ * names this specific step assigned/modified.
+ */
+function naiveVars(
+  x: number | null,
+  seen: number[],
+  answer: number | null,
+  totalShuffled: number,
+  changed: string[] = [],
+): VarEntry[] {
+  const entry = (name: string, value: string): VarEntry => ({
+    name,
+    value,
+    ...(changed.includes(name) ? { changed: true } : {}),
+  })
+  return [
+    entry('k', String(K)),
+    entry('x', x === null ? '—' : String(x)),
+    entry('seen', `[${seen.join(', ')}]`),
+    entry('answer', answer === null ? '—' : String(answer)),
+    entry('values shuffled', String(totalShuffled)),
+  ]
+}
+
 function naiveSteps(): Step<NaiveState>[] {
   const steps: Step<NaiveState>[] = []
   const seen: number[] = []
   let totalShuffled = 0
+  let answerVar: number | null = null
 
   // Intro sentinel
   steps.push({
     state: { streamSoFar: [], seen: [], answer: null, totalShuffled: 0, phase: 'intro' },
     description: `Re-sort everything on every arrival. With ${STREAM.length} items arriving one at a time, we pay for sorts over lists of size 1, 2, …, ${STREAM.length} — that is ${STREAM.length * (STREAM.length + 1) / 2} total values shuffled just to read off one number each time. Start: seen list is empty.`,
     codeLine: 0,
+    vars: naiveVars(null, [], null, 0, ['k', 'seen']),
   })
 
   for (let s = 0; s < STREAM.length; s++) {
@@ -46,6 +74,7 @@ function naiveSteps(): Step<NaiveState>[] {
       state: { streamSoFar: STREAM.slice(0, s + 1), seen: [...seen], answer: seen.length > K ? seen[K - 1] : null, totalShuffled, phase: 'append' },
       description: `${x} arrives — append it to seen. List is now [${seen.join(', ')}] (${seen.length} item${seen.length === 1 ? '' : 's'}). About to re-sort all ${seen.length} value${seen.length === 1 ? '' : 's'}.`,
       codeLine: 2,
+      vars: naiveVars(x, [...seen], answerVar, totalShuffled, ['x', 'seen']),
     })
 
     // Sort step — linear "values shuffled" proxy: sorting n kept values counts n shuffles
@@ -56,15 +85,18 @@ function naiveSteps(): Step<NaiveState>[] {
       state: { streamSoFar: STREAM.slice(0, s + 1), seen: [...seen], answer: seen.length >= K ? seen[K - 1] : null, totalShuffled, phase: 'sort' },
       description: `Sort ${seen.length} value${seen.length === 1 ? '' : 's'} descending → [${seen.join(', ')}]. That is sort #${s + 1} of ${STREAM.length}, shuffling ${sortCost} value${sortCost === 1 ? '' : 's'} (${totalShuffled} total so far). The previous sort's order is thrown away as if it never happened.`,
       codeLine: 3,
+      vars: naiveVars(x, [...seen], answerVar, totalShuffled, ['seen', 'values shuffled']),
     })
 
     // Read answer step — only when we have at least K items
     if (seen.length >= K) {
       const ans = seen[K - 1]
+      answerVar = ans
       steps.push({
         state: { streamSoFar: STREAM.slice(0, s + 1), seen: [...seen], answer: ans, totalShuffled, phase: 'read' },
         description: `Read seen[k − 1] = seen[${K - 1}] = ${ans} — that is the ${K}rd largest so far. Correct, but we re-sorted ${seen.length} value${seen.length === 1 ? '' : 's'} to learn one number, and we are keeping all ${seen.length} values in memory even though only the top ${K} can ever matter.`,
         codeLine: 4,
+        vars: naiveVars(x, [...seen], answerVar, totalShuffled, ['answer']),
       })
     }
   }
@@ -73,6 +105,7 @@ function naiveSteps(): Step<NaiveState>[] {
     state: { streamSoFar: [...STREAM], seen: [...seen], answer: seen[K - 1], totalShuffled, phase: 'done' },
     description: `Stream exhausted. Final answer: ${seen[K - 1]}. Total cost: ${totalShuffled} values shuffled across ${STREAM.length} sorts (lists of size 1 through ${STREAM.length}), all ${STREAM.length} values kept in memory. A min-heap of size ${K} would have used ${K} slots of memory and at most log₂ ${K} ≈ 2 swaps per arrival — with no wasted re-sorting.`,
     codeLine: 4,
+    vars: naiveVars(null, [...seen], answerVar, totalShuffled, ['x']),
   })
 
   return steps
@@ -151,16 +184,47 @@ interface SortedHistState {
   phase: 'intro' | 'search' | 'shift' | 'read' | 'done'
 }
 
+/**
+ * Live variables for the sorted-history demo, named as in journey[0].pseudocode.
+ * Same seven entries in the same order on every step.
+ */
+function sortedHistVars(
+  x: number | null,
+  list: number[],
+  slot: number | null,
+  shifts: number | null,
+  shiftsTotal: number,
+  answer: number | null,
+  changed: string[] = [],
+): VarEntry[] {
+  const entry = (name: string, value: string): VarEntry => ({
+    name,
+    value,
+    ...(changed.includes(name) ? { changed: true } : {}),
+  })
+  return [
+    entry('k', String(K)),
+    entry('x', x === null ? '—' : String(x)),
+    entry('seen', `[${list.join(', ')}]`),
+    entry('slot', slot === null ? '—' : String(slot)),
+    entry('shifts', shifts === null ? '—' : String(shifts)),
+    entry('total shifts', String(shiftsTotal)),
+    entry('answer', answer === null ? '—' : String(answer)),
+  ]
+}
+
 function sortedHistSteps(): Step<SortedHistState>[] {
   const steps: Step<SortedHistState>[] = []
   const list: number[] = []
   let shiftsTotal = 0
+  let answerVar: number | null = null
 
   // Intro sentinel
   steps.push({
     state: { streamSoFar: [], list: [], insertSlot: null, shiftsCurrent: 0, shiftsTotal: 0, answer: null, phase: 'intro' },
     description: `Never re-sort: the list is already in descending order after each arrival, so the next newcomer only needs to find its slot and slide in. Binary search finds the slot in O(log n); the shift is the real cost — up to n items shuffled one step each.`,
     codeLine: 0,
+    vars: sortedHistVars(null, [], null, null, 0, null, ['k', 'seen']),
   })
 
   for (let s = 0; s < STREAM.length; s++) {
@@ -185,8 +249,9 @@ function sortedHistSteps(): Step<SortedHistState>[] {
     // Binary search step
     steps.push({
       state: { streamSoFar: STREAM.slice(0, s + 1), list: [...list], insertSlot: slot, shiftsCurrent, shiftsTotal, answer: list.length >= K ? list[K - 1] : null, phase: 'search' },
-      description: `${x} arrives. Binary-search the sorted list [${list.length > 0 ? list.join(', ') : 'empty'}] for ${x}'s slot → index ${slot}. This shift ${shiftsCurrent} item${shiftsCurrent === 1 ? '' : 's'} to the right to make room.`,
+      description: `${x} arrives. Binary-search the sorted list [${list.length > 0 ? list.join(', ') : 'empty'}] for ${x}'s slot → index ${slot}. Making room there means shifting ${shiftsCurrent} item${shiftsCurrent === 1 ? '' : 's'} one place to the right.`,
       codeLine: 2,
+      vars: sortedHistVars(x, [...list], slot, shiftsCurrent, shiftsTotal, answerVar, ['x', 'slot', 'shifts']),
     })
 
     // Perform insertion
@@ -198,13 +263,19 @@ function sortedHistSteps(): Step<SortedHistState>[] {
       state: { streamSoFar: STREAM.slice(0, s + 1), list: [...list], insertSlot: slot, shiftsCurrent, shiftsTotal, answer: list.length >= K ? list[K - 1] : null, phase: 'shift' },
       description: `Shift ${shiftsCurrent} item${shiftsCurrent === 1 ? '' : 's'} right, drop ${x} at index ${slot}. List is now [${list.join(', ')}]. Shifts so far: ${shiftsTotal} total.`,
       codeLine: 3,
+      vars: sortedHistVars(
+        x, [...list], slot, shiftsCurrent, shiftsTotal, answerVar,
+        shiftsCurrent > 0 ? ['seen', 'total shifts'] : ['seen'],
+      ),
     })
 
     if (list.length >= K) {
+      answerVar = list[K - 1]
       steps.push({
         state: { streamSoFar: STREAM.slice(0, s + 1), list: [...list], insertSlot: slot, shiftsCurrent, shiftsTotal, answer: list[K - 1], phase: 'read' },
         description: `Read list[k − 1] = list[${K - 1}] = ${list[K - 1]} — that is the ${K}rd largest so far. Notice: we're keeping ${list.length} value${list.length === 1 ? '' : 's'} but only list[${K - 1}] is ever read; every value below slot ${K - 1} is dead weight we keep shifting around.`,
         codeLine: 4,
+        vars: sortedHistVars(x, [...list], slot, shiftsCurrent, shiftsTotal, answerVar, ['answer']),
       })
     }
   }
@@ -213,6 +284,7 @@ function sortedHistSteps(): Step<SortedHistState>[] {
     state: { streamSoFar: [...STREAM], list: [...list], insertSlot: null, shiftsCurrent: 0, shiftsTotal, answer: list[K - 1], phase: 'done' },
     description: `Stream exhausted. Final answer: ${list[K - 1]}. Total shifts: ${shiftsTotal} (versus ${STREAM.length * (STREAM.length + 1) / 2} for re-sorting). Better — but we maintained [${list.slice(K).join(', ')}] below the top ${K}: ${list.length - K} dead values kept perfectly ordered just in case, and the list still grows without bound.`,
     codeLine: 4,
+    vars: sortedHistVars(null, [...list], null, null, shiftsTotal, answerVar, ['x']),
   })
 
   return steps
@@ -299,17 +371,47 @@ interface TopKRowState {
   phase: 'intro' | 'compare' | 'reject' | 'insert' | 'read' | 'done'
 }
 
+/**
+ * Live variables for the top-k-row demo, named as in journey[1].pseudocode.
+ * Same seven entries in the same order on every step.
+ */
+function topKRowVars(
+  x: number | null,
+  top: number[],
+  shiftsTotal: number,
+  rejections: number,
+  answer: number | null,
+  changed: string[] = [],
+): VarEntry[] {
+  const entry = (name: string, value: string): VarEntry => ({
+    name,
+    value,
+    ...(changed.includes(name) ? { changed: true } : {}),
+  })
+  return [
+    entry('k', String(K)),
+    entry('x', x === null ? '—' : String(x)),
+    entry('top', `[${top.join(', ')}]`),
+    entry('top[k−1]', top.length >= K ? String(top[K - 1]) : '—'),
+    entry('total shifts', String(shiftsTotal)),
+    entry('rejections', String(rejections)),
+    entry('answer', answer === null ? '—' : String(answer)),
+  ]
+}
+
 function topKRowSteps(): Step<TopKRowState>[] {
   const steps: Step<TopKRowState>[] = []
   const top: number[] = []
   let shiftsTotal = 0
   let rejections = 0
+  let answerVar: number | null = null
 
   // Intro sentinel
   steps.push({
     state: { streamSoFar: [], top: [], rejected: false, insertSlot: null, shiftsCurrent: 0, shiftsTotal: 0, rejections: 0, answer: null, phase: 'intro' },
     description: `Cap memory at ${K} slots: keep only the top ${K} largest values in descending order. Each new arrival either beats the weakest of the ${K} and slides in, or is rejected outright. This bounds memory but still maintains full sort order — watch what that costs.`,
     codeLine: 0,
+    vars: topKRowVars(null, [], 0, 0, null, ['k', 'top']),
   })
 
   for (let s = 0; s < STREAM.length; s++) {
@@ -322,6 +424,7 @@ function topKRowSteps(): Step<TopKRowState>[] {
         state: { streamSoFar: STREAM.slice(0, s + 1), top: [...top], rejected: false, insertSlot: null, shiftsCurrent: 0, shiftsTotal, rejections, answer: top.length >= K ? top[K - 1] : null, phase: 'compare' },
         description: `${x} arrives. The row is full: [${top.join(', ')}]. Compare ${x} against weakest = top[${K - 1}] = ${threshold}.`,
         codeLine: top.length >= K ? 2 : 1,
+        vars: topKRowVars(x, [...top], shiftsTotal, rejections, answerVar, ['x']),
       })
     }
 
@@ -332,10 +435,13 @@ function topKRowSteps(): Step<TopKRowState>[] {
         state: { streamSoFar: STREAM.slice(0, s + 1), top: [...top], rejected: true, insertSlot: null, shiftsCurrent: 0, shiftsTotal, rejections, answer: top[K - 1], phase: 'reject' },
         description: `${x} ≤ ${threshold} — rejected in one comparison. ${x} cannot displace any of the current top ${K}. The row stays [${top.join(', ')}]. ${rejections} rejection${rejections === 1 ? '' : 's'} so far.`,
         codeLine: 2,
+        vars: topKRowVars(x, [...top], shiftsTotal, rejections, answerVar, ['rejections']),
       })
     } else {
       // Evict weakest if full, then insert into sorted position
-      if (top.length >= K) {
+      const wasFull = top.length >= K
+      const prevThreshold = wasFull ? top[K - 1] : null
+      if (wasFull) {
         top.pop() // remove weakest
       }
 
@@ -348,20 +454,28 @@ function topKRowSteps(): Step<TopKRowState>[] {
       top.splice(slot, 0, x)
       shiftsTotal += shiftsCurrent
 
+      const newThreshold = top.length >= K ? top[K - 1] : null
+      const insertChanged = ['top']
+      if (threshold === null) insertChanged.unshift('x') // no compare step preceded this insert
+      if (newThreshold !== prevThreshold) insertChanged.push('top[k−1]')
+      if (shiftsCurrent > 0) insertChanged.push('total shifts')
+
       steps.push({
         state: { streamSoFar: STREAM.slice(0, s + 1), top: [...top], rejected: false, insertSlot: slot, shiftsCurrent, shiftsTotal, rejections, answer: top.length >= K ? top[K - 1] : null, phase: 'insert' },
-        description:
-          top.length < K
-            ? `${x} arrives — row has ${top.length - 1 < 0 ? 0 : top.length - 1} of ${K} slots filled; ${x} joins. Row: [${top.join(', ')}]. ${shiftsCurrent} shift${shiftsCurrent === 1 ? '' : 's'} (${shiftsTotal} total).`
-            : `${x} > ${threshold} — evict the weakest (${threshold}), slide ${x} into slot ${slot} with ${shiftsCurrent} shift${shiftsCurrent === 1 ? '' : 's'}. Row: [${top.join(', ')}]. Total shifts: ${shiftsTotal}.`,
+        description: !wasFull
+          ? `${x} arrives — row has ${top.length - 1} of ${K} slots filled; ${x} slides into slot ${slot}. Row: [${top.join(', ')}]. ${shiftsCurrent} shift${shiftsCurrent === 1 ? '' : 's'} (${shiftsTotal} total).`
+          : `${x} > ${prevThreshold} — evict the weakest (${prevThreshold}), slide ${x} into slot ${slot} with ${shiftsCurrent} shift${shiftsCurrent === 1 ? '' : 's'}. Row: [${top.join(', ')}]. Total shifts: ${shiftsTotal}.`,
         codeLine: 4,
+        vars: topKRowVars(x, [...top], shiftsTotal, rejections, answerVar, insertChanged),
       })
 
       if (top.length >= K) {
+        answerVar = top[K - 1]
         steps.push({
           state: { streamSoFar: STREAM.slice(0, s + 1), top: [...top], rejected: false, insertSlot: slot, shiftsCurrent, shiftsTotal, rejections, answer: top[K - 1], phase: 'read' },
           description: `Answer: top[${K - 1}] = ${top[K - 1]}. The row [${top.join(', ')}] is kept in full sorted order, but only the weakest slot at index ${K - 1} is ever read — the ordering of [${top.slice(0, K - 1).join(', ')}] above it is never consulted. Pure overhead when k grows large.`,
           codeLine: 5,
+          vars: topKRowVars(x, [...top], shiftsTotal, rejections, answerVar, ['answer']),
         })
       }
     }
@@ -371,6 +485,7 @@ function topKRowSteps(): Step<TopKRowState>[] {
     state: { streamSoFar: [...STREAM], top: [...top], rejected: false, insertSlot: null, shiftsCurrent: 0, shiftsTotal, rejections, answer: top[K - 1], phase: 'done' },
     description: `Stream exhausted. Final answer: ${top[K - 1]} (top row: [${top.join(', ')}]). ${rejections} item${rejections === 1 ? '' : 's'} rejected outright; ${shiftsTotal} total shifts to maintain full order in a row nobody reads top-to-bottom. A min-heap gives the same answer with at most log₂ ${K} ≈ 2 swaps per arrival — never maintaining order that is not asked about.`,
     codeLine: 5,
+    vars: topKRowVars(null, [...top], shiftsTotal, rejections, answerVar, ['x']),
   })
 
   return steps

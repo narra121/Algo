@@ -1,4 +1,4 @@
-import type { AttemptDemo, Step } from '../../core/types'
+import type { AttemptDemo, Step, VarEntry } from '../../core/types'
 import { N, UNIONS, QUERY } from './data'
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -106,6 +106,24 @@ function naiveSteps(): Step<NaiveState>[] {
   const steps: Step<NaiveState>[] = []
   const edges: [number, number][] = []
 
+  /* Live pseudocode variables mirrored into the vars panel. */
+  let aV = '—'
+  let bV = '—'
+  let visitedV = '—'
+  let reachedV = '—'
+  let compV = '—'
+
+  const fmtEdges = () =>
+    edges.length === 0 ? '[]' : `[${edges.map(([u, v]) => `${u}–${v}`).join(', ')}]`
+  const mkVars = (changed: string[]): VarEntry[] => [
+    { name: 'edges', value: fmtEdges(), changed: changed.includes('edges') || undefined },
+    { name: 'a', value: aV, changed: changed.includes('a') || undefined },
+    { name: 'b', value: bV, changed: changed.includes('b') || undefined },
+    { name: 'visited', value: visitedV, changed: changed.includes('visited') || undefined },
+    { name: 'reached', value: reachedV, changed: changed.includes('reached') || undefined },
+    { name: 'components', value: compV, changed: changed.includes('components') || undefined },
+  ]
+
   const snap = (visited: number[], components: number, querying: boolean): NaiveState => ({
     edges: [...edges] as [number, number][],
     visited: [...visited],
@@ -118,25 +136,32 @@ function naiveSteps(): Step<NaiveState>[] {
     state: snap([], -1, false),
     description: `Brute force: maintain a raw edge list, and re-run a full BFS from scratch every time someone asks "are these two nodes connected?" or "how many components are there?". Start: 8 isolated nodes, empty edge list.`,
     codeLine: 0,
+    vars: mkVars(['edges']),
   })
 
-  // Add edges one by one (first 6 unions, without counting — just appending)
+  // Add edges one by one (first 6 unions — just appending; queries pay later)
   for (let ui = 0; ui < 6; ui++) {
     const [a, b] = UNIONS[ui]
     edges.push([a, b])
+    aV = String(a)
+    bV = String(b)
     steps.push({
       state: snap([], -1, false),
       description: `union(${a}, ${b}): append edge ${a}–${b} to the list. Edge count is now ${edges.length}. No computation — answers are deferred until a query arrives.`,
       codeLine: 0,
+      vars: mkVars(['edges', 'a', 'b']),
     })
   }
 
   // The connectivity query: are 0 and 4 connected after 6 unions?
   const [qa, qb] = QUERY  // [0, 4]
+  aV = String(qa)
+  bV = String(qb)
   steps.push({
     state: snap([], -1, true),
     description: `Query: connected?(${qa}, ${qb})? Time to earn the answer the hard way — launch a full BFS from node ${qa} across all ${edges.length} edges.`,
     codeLine: 1,
+    vars: mkVars(['a', 'b']),
   })
 
   // Simulate BFS from node 0 with the 6 edges
@@ -155,10 +180,13 @@ function naiveSteps(): Step<NaiveState>[] {
   while (queueA.length > 0) {
     const node = queueA.shift()!
     visitedA.push(node)
+    visitedV = `{${visitedA.join(', ')}}`
+    const newNbs = adj[node].filter(n => !seenA.has(n))
     steps.push({
       state: snap([...visitedA], -1, true),
-      description: `BFS from ${qa}: visit node ${node}. Neighbors via edges: [${adj[node].filter(n => !seenA.has(n)).join(', ') || 'none new'}]. Visited so far: {${visitedA.join(', ')}}.`,
+      description: `BFS from ${qa}: visit node ${node}. Neighbors via edges: [${newNbs.join(', ') || 'none new'}]. Visited so far: {${visitedA.join(', ')}}.`,
       codeLine: 2,
+      vars: mkVars(['visited']),
     })
     for (const nb of adj[node]) {
       if (!seenA.has(nb)) {
@@ -169,10 +197,12 @@ function naiveSteps(): Step<NaiveState>[] {
   }
 
   const reached = seenA.has(qb)
+  reachedV = String(reached)
   steps.push({
     state: snap([...visitedA], -1, true),
     description: `BFS complete. Reached ${visitedA.length} nodes: {${visitedA.join(', ')}}. Node ${qb} was ${reached ? '' : 'NOT '}found — answer: ${reached ? 'CONNECTED' : 'NOT connected'}. The BFS re-derived connectivity that prior union calls had already established, then immediately threw all that work away.`,
     codeLine: 3,
+    vars: mkVars(['reached']),
   })
 
   // Now add the 7th union and do a full component count via BFS
@@ -180,42 +210,64 @@ function naiveSteps(): Step<NaiveState>[] {
   edges.push([ua7, ub7])
   adj[ua7].push(ub7)
   adj[ub7].push(ua7)
+  aV = String(ua7)
+  bV = String(ub7)
+  visitedV = '—'
+  reachedV = '—'
   steps.push({
     state: snap([], -1, false),
-    description: `union(${ua7}, ${ub7}): append edge ${ua7}–${ub7}. Edge count is now ${edges.length}. Now compute the component count — that means BFS from every unvisited node.`,
+    description: `union(${ua7}, ${ub7}): append edge ${ua7}–${ub7}. Edge count is now ${edges.length}. Now compute the component count — that means trying a BFS from every one of the ${N} nodes, launching a fresh traversal whenever the start is unvisited.`,
     codeLine: 4,
+    vars: mkVars(['edges', 'a', 'b', 'visited', 'reached']),
   })
 
-  // Full BFS sweep for component counting
+  // Full BFS sweep for component counting — every start checked, every visit shown
   const globalSeen = new Set<number>()
   let compCount = 0
   const allVisited: number[] = []
   for (let start = 0; start < N; start++) {
-    if (globalSeen.has(start)) continue
+    if (globalSeen.has(start)) {
+      steps.push({
+        state: snap([...allVisited], compCount, false),
+        description: `Sweep start = ${start}: node ${start} is already marked visited (a previous BFS swallowed it), so it is NOT a new component. One wasted check; move to the next start.`,
+        codeLine: 5,
+        vars: mkVars([]),
+      })
+      continue
+    }
     compCount++
+    compV = String(compCount)
     const bfsQ = [start]
     globalSeen.add(start)
+    steps.push({
+      state: snap([...allVisited], compCount, false),
+      description: `Sweep start = ${start}: node ${start} has never been visited — that is a brand-new component. components ← ${compCount}, and a fresh BFS launches from ${start} to mark everything it can reach.`,
+      codeLine: 5,
+      vars: mkVars(['components']),
+    })
     while (bfsQ.length > 0) {
       const node = bfsQ.shift()!
       allVisited.push(node)
-      for (const nb of adj[node]) {
-        if (!globalSeen.has(nb)) {
-          globalSeen.add(nb)
-          bfsQ.push(nb)
-        }
+      visitedV = `{${allVisited.join(', ')}}`
+      const newNbs = adj[node].filter(nb => !globalSeen.has(nb))
+      for (const nb of newNbs) {
+        globalSeen.add(nb)
+        bfsQ.push(nb)
       }
+      steps.push({
+        state: snap([...allVisited], compCount, false),
+        description: `Sweep BFS: visit node ${node}; new neighbors discovered: ${newNbs.length > 0 ? `[${newNbs.join(', ')}]` : 'none'}. Visited ${allVisited.length} of ${N} nodes so far.`,
+        codeLine: 5,
+        vars: mkVars(['visited']),
+      })
     }
-    steps.push({
-      state: snap([...allVisited], compCount, false),
-      description: `BFS sweep: start from node ${start} (not yet visited). Component ${compCount} found, covering nodes reachable from ${start}. Running total: ${compCount} component${compCount > 1 ? 's' : ''}.`,
-      codeLine: 5,
-    })
   }
 
   steps.push({
     state: snap([...allVisited], compCount, false),
-    description: `Done. After all 7 unions: ${compCount} component. Every future "connected?" query will re-run this entire BFS from scratch — the ${edges.length} edges and ${N} nodes are re-examined each time, carrying forward nothing from the query we just answered.`,
+    description: `Done. After all 7 unions: ${compCount} component. The sweep paid for all ${N} start-checks plus ${allVisited.length} BFS visits over ${edges.length} edges, and the earlier connected?(${qa}, ${qb}) query paid ${visitedA.length} visits of its own. Every future "connected?" query will re-run a full BFS from scratch — carrying forward nothing from the query we just answered.`,
     codeLine: 5,
+    vars: mkVars([]),
   })
 
   return steps
@@ -312,6 +364,20 @@ function labelsSteps(): Step<LabelsState>[] {
   let relabels = 0
   let totalScans = 0
 
+  /* Live pseudocode variables mirrored into the vars panel. */
+  let aV = '—'
+  let bV = '—'
+  let oldV = '—'
+
+  const mkVars = (changed: string[]): VarEntry[] => [
+    { name: 'comp[]', value: `[${comp.join(', ')}]`, changed: changed.includes('comp[]') || undefined },
+    { name: 'a', value: aV, changed: changed.includes('a') || undefined },
+    { name: 'b', value: bV, changed: changed.includes('b') || undefined },
+    { name: 'old', value: oldV, changed: changed.includes('old') || undefined },
+    { name: 'relabels', value: String(relabels), changed: changed.includes('relabels') || undefined },
+    { name: 'node-scans', value: String(totalScans), changed: changed.includes('node-scans') || undefined },
+  ]
+
   const snap = (scanIdx: number, flash: number[]): LabelsState => ({
     comp: [...comp],
     scanIdx,
@@ -325,27 +391,33 @@ function labelsSteps(): Step<LabelsState>[] {
     state: snap(-1, []),
     description: `Labels approach: stamp every node with its component ID. connected? is a one-comparison lookup. But union(a, b) must scan ALL ${N} nodes to relabel the losing group. Start: comp[i] = i, ${N} components.`,
     codeLine: 0,
+    vars: mkVars(['comp[]']),
   })
 
   for (let ui = 0; ui < UNIONS.length; ui++) {
     const [a, b] = UNIONS[ui]
     const ca = comp[a]
     const cb = comp[b]
+    aV = String(a)
+    bV = String(b)
 
     if (ca === cb) {
       steps.push({
         state: snap(-1, []),
         description: `union(${a}, ${b}): comp[${a}] = comp[${b}] = ${ca} — already same component. Stop early, no scan needed.`,
         codeLine: 3,
+        vars: mkVars(['a', 'b']),
       })
       continue
     }
 
     // Show the old values before scanning
+    oldV = String(cb)
     steps.push({
       state: snap(-1, []),
-      description: `union(${a}, ${b}): comp[${a}] = ${ca}, comp[${b}] = ${cb} — different components. Must rename every node labeled ${cb} to ${ca}. Scanning all ${N} nodes now.`,
+      description: `union(${a}, ${b}): comp[${a}] = ${ca}, comp[${b}] = ${cb} — different components. old ← ${cb}; must rename every node labeled ${cb} to ${ca}. Scanning all ${N} nodes now.`,
       codeLine: 4,
+      vars: mkVars(['a', 'b', 'old']),
     })
 
     // Scan and relabel
@@ -363,6 +435,7 @@ function labelsSteps(): Step<LabelsState>[] {
       state: snap(-1, [...justRelabeled]),
       description: `Scan complete (${N} checks). Nodes ${justRelabeled.join(', ')} had label ${cb} — relabeled to ${ca}. That is ${justRelabeled.length} relabel${justRelabeled.length > 1 ? 's' : ''} this union. Running total: ${relabels} relabels across ${totalScans} node-scans.`,
       codeLine: 6,
+      vars: mkVars(['comp[]', 'relabels', 'node-scans']),
     })
   }
 
@@ -371,6 +444,7 @@ function labelsSteps(): Step<LabelsState>[] {
     state: snap(-1, []),
     description: `All 7 unions done. Final comp: [${comp.join(', ')}] — every node carries label 0 (one component). Cost: ${relabels} relabels across ${totalScans} node-scans (${UNIONS.length} × ${N} = ${totalScans}). The last union(3,7) alone rewrote ${4} labels — half the graph in one blow. At a million nodes, one bad merge rewrites 500,000 labels. The O(n) cost just moved from queries into unions.`,
     codeLine: 6,
+    vars: mkVars([]),
   })
 
   return steps
@@ -464,6 +538,23 @@ function treesSteps(): Step<TreesState>[] {
     return max
   }
 
+  /* Live pseudocode variables mirrored into the vars panel. */
+  let aV = '—'
+  let bV = '—'
+  let faV = '—'
+  let fbV = '—'
+  let hopsV = '—'
+
+  const mkVars = (changed: string[]): VarEntry[] => [
+    { name: 'parent[]', value: `[${parent.join(', ')}]`, changed: changed.includes('parent[]') || undefined },
+    { name: 'a', value: aV, changed: changed.includes('a') || undefined },
+    { name: 'b', value: bV, changed: changed.includes('b') || undefined },
+    { name: 'find(a)', value: faV, changed: changed.includes('find(a)') || undefined },
+    { name: 'find(b)', value: fbV, changed: changed.includes('find(b)') || undefined },
+    { name: 'hops', value: hopsV, changed: changed.includes('hops') || undefined },
+    { name: 'max chain', value: String(maxDepth()), changed: changed.includes('max chain') || undefined },
+  ]
+
   const snap = (active: number[], flash: number[]): TreesState => ({
     parent: [...parent],
     active: [...active],
@@ -476,7 +567,10 @@ function treesSteps(): Step<TreesState>[] {
     state: snap([], []),
     description: `Trees approach: each node holds a parent pointer — parent[i] = i means "I am a root". Merging two groups costs one pointer write: a's root bows to b's root. Start: all ${N} nodes are their own roots.`,
     codeLine: 0,
+    vars: mkVars(['parent[]']),
   })
+
+  let lastMax = 0
 
   // Process unions one at a time, showing find() walks
   for (let ui = 0; ui < UNIONS.length; ui++) {
@@ -485,6 +579,12 @@ function treesSteps(): Step<TreesState>[] {
     // Show find(a)
     const fa = treesFind(parent, a)
     const fb = treesFind(parent, b)
+    aV = String(a)
+    bV = String(b)
+    faV = String(fa.root)
+    fbV = String(fb.root)
+    const hopCount = (fa.path.length - 1) + (fb.path.length - 1)
+    hopsV = `${fa.path.length - 1} + ${fb.path.length - 1} = ${hopCount}`
 
     if (ui < 4) {
       // First four unions: both arguments are already roots, just one step each
@@ -492,6 +592,7 @@ function treesSteps(): Step<TreesState>[] {
         state: snap([...fa.path, ...fb.path], []),
         description: `union(${a}, ${b}): find(${a}) = ${fa.root} (${fa.path.length - 1} hop${fa.path.length - 1 !== 1 ? 's' : ''}); find(${b}) = ${fb.root} (${fb.path.length - 1} hop${fb.path.length - 1 !== 1 ? 's' : ''}). Different roots — merge.`,
         codeLine: 5,
+        vars: mkVars(['a', 'b', 'find(a)', 'find(b)', 'hops']),
       })
     } else {
       // Later unions: show the walk explicitly because paths are longer
@@ -499,16 +600,20 @@ function treesSteps(): Step<TreesState>[] {
         state: snap([...fa.path, ...fb.path], []),
         description: `union(${a}, ${b}): find(${a}) walks ${fa.path.join(' → ')} (${fa.path.length - 1} hop${fa.path.length - 1 !== 1 ? 's' : ''}); find(${b}) walks ${fb.path.join(' → ')} (${fb.path.length - 1} hop${fb.path.length - 1 !== 1 ? 's' : ''}). Roots: ${fa.root} and ${fb.root} — different, so merge.`,
         codeLine: 2,
+        vars: mkVars(['a', 'b', 'find(a)', 'find(b)', 'hops']),
       })
     }
 
     if (fa.root !== fb.root) {
       parent[fa.root] = fb.root  // a's root bows to b's root
       const depth = maxDepth()
+      const chainGrew = depth !== lastMax
+      lastMax = depth
       steps.push({
         state: snap([], [fa.root]),
         description: `Repoint root ${fa.root} → ${fb.root}. One pointer write, all of ${fa.root}'s subtree now belongs to ${fb.root}'s group. Longest chain now = ${depth} hop${depth !== 1 ? 's' : ''}.`,
         codeLine: 6,
+        vars: mkVars(chainGrew ? ['parent[]', 'max chain'] : ['parent[]']),
       })
     }
   }
@@ -517,10 +622,16 @@ function treesSteps(): Step<TreesState>[] {
   // After all 7 unions, longest chain is 0→1→3→7 (3 hops)
   // find(0) result
   const f0 = treesFind(parent, 0)
+  aV = '0'
+  bV = '—'
+  faV = String(f0.root)
+  fbV = '—'
+  hopsV = String(f0.path.length - 1)
   steps.push({
     state: snap([...f0.path], []),
     description: `Final state: find(0) walks ${f0.path.join(' → ')} — ${f0.path.length - 1} hops. This is our specific stream with its well-behaved pairs. But "a's root always bows to b's root" is reckless: the stream (0,1)(1,2)(2,3)…(6,7) welds a 7-hop chain, and find(0) climbs ${N - 1} arrows on ${N} nodes. The O(n) cost hid inside find() instead of union(). Fix: choose who bows by height, and flatten every path after you walk it.`,
     codeLine: 2,
+    vars: mkVars(['a', 'b', 'find(a)', 'find(b)', 'hops']),
   })
 
   return steps
