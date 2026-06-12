@@ -48,7 +48,7 @@ function naiveSteps(): Step<NaiveState>[] {
       codeLine: 2,
     })
 
-    // Sort step — count this sort's cost as n log n comparisons proxy: n items = n shuffles
+    // Sort step — linear "values shuffled" proxy: sorting n kept values counts n shuffles
     const sortCost = seen.length
     totalShuffled += sortCost
     seen.sort((a, b) => b - a)
@@ -94,7 +94,7 @@ function NaiveViz({ step }: { step: Step<NaiveState> }) {
           : ''
         }
         pointerFor={k =>
-          k === streamLen - 1 && phase !== 'intro' ? { label: 'new', tone: 'amber' } : null
+          k === streamLen - 1 && phase !== 'intro' ? { label: 'new', tone: 'mint' } : null
         }
       />
       {seen.length > 0 && (
@@ -115,7 +115,7 @@ function NaiveViz({ step }: { step: Step<NaiveState> }) {
       )}
       <Legend
         items={[
-          { tone: 'amber', label: 'latest arrival' },
+          { tone: 'mint', label: 'latest arrival (pointer)' },
           { tone: 'amber', label: 'top k kept' },
           { tone: 'mint', label: 'answer = seen[k−1]' },
           { label: 'dead weight below k' },
@@ -234,7 +234,7 @@ function SortedHistViz({ step }: { step: Step<SortedHistState> }) {
           : ''
         }
         pointerFor={k =>
-          k === streamLen - 1 && phase !== 'intro' ? { label: 'new', tone: 'amber' } : null
+          k === streamLen - 1 && phase !== 'intro' ? { label: 'new', tone: 'mint' } : null
         }
       />
       {list.length > 0 && (
@@ -257,7 +257,7 @@ function SortedHistViz({ step }: { step: Step<SortedHistState> }) {
       )}
       <Legend
         items={[
-          { tone: 'amber', label: 'latest arrival' },
+          { tone: 'mint', label: 'latest arrival (pointer)' },
           { tone: 'amber', label: 'top k (useful)' },
           { tone: 'mint', label: 'just inserted' },
           { tone: 'sky', label: 'answer = list[k−1]' },
@@ -394,7 +394,7 @@ function TopKRowViz({ step }: { step: Step<TopKRowState> }) {
         }
         pointerFor={k =>
           k === streamLen - 1 && phase !== 'intro'
-            ? { label: rejected ? 'REJECTED' : 'new', tone: rejected ? 'rose' : 'amber' }
+            ? { label: rejected ? 'REJECTED' : 'new', tone: rejected ? 'rose' : 'mint' }
             : null
         }
       />
@@ -419,7 +419,7 @@ function TopKRowViz({ step }: { step: Step<TopKRowState> }) {
       )}
       <Legend
         items={[
-          { tone: 'amber', label: 'latest arrival' },
+          { tone: 'mint', label: 'latest arrival (pointer)' },
           { tone: 'rose', label: 'rejected (below threshold)' },
           { tone: 'mint', label: 'just inserted' },
           { tone: 'amber', label: 'threshold = top[k−1]' },
