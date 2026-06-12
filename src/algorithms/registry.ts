@@ -44,4 +44,24 @@ for (const a of algorithms) {
       throw new Error(`AlgoLens: "${a.id}" journey must end with exactly one 'optimal' attempt`)
     }
   })
+
+  const checkDemo = (
+    owner: string,
+    demo: import('../core/types').AttemptDemo | undefined,
+    pseudocode: string[],
+  ) => {
+    if (!demo) throw new Error(`AlgoLens: ${owner} is missing its demo`)
+    const steps = demo.generateSteps()
+    if (steps.length < 2) throw new Error(`AlgoLens: ${owner} demo has ${steps.length} steps (need ≥2)`)
+    steps.forEach((s, i) => {
+      if (!s.description.trim()) throw new Error(`AlgoLens: ${owner} demo step ${i} has empty narration`)
+      if (s.codeLine < -1 || s.codeLine >= pseudocode.length) {
+        throw new Error(
+          `AlgoLens: ${owner} demo step ${i} codeLine ${s.codeLine} out of range (pseudocode has ${pseudocode.length} lines)`,
+        )
+      }
+    })
+  }
+  checkDemo(`"${a.id}" naive`, a.problem.naive.demo, a.problem.naive.pseudocode)
+  a.journey.forEach((j, i) => checkDemo(`"${a.id}" journey[${i}]`, j.demo, j.pseudocode))
 }
