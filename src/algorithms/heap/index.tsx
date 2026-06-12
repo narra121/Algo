@@ -1,4 +1,4 @@
-﻿import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
 import { naiveDemo, sortedHistoryDemo, topKRowDemo } from './demos'
 import { STREAM, K } from './data'
 
