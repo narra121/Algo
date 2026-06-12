@@ -1,34 +1,9 @@
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
+import { NODES, EDGES, POS, SOURCE, neighborsOf } from './data'
+import type { NodeId } from './data'
+import { naiveDemo, hopsDemo, greedyWalkDemo, plainQueueDemo } from './demos'
 
 /* Canonical example: single-source shortest paths from A in a 6-node weighted graph. */
-
-const NODES = ['A', 'B', 'C', 'D', 'E', 'F'] as const
-type NodeId = (typeof NODES)[number]
-
-const SOURCE: NodeId = 'A'
-
-/** Fixed layout for the SVG (viewBox 0 0 460 260). */
-const POS: Record<NodeId, { x: number; y: number }> = {
-  A: { x: 40, y: 130 },
-  B: { x: 160, y: 50 },
-  C: { x: 160, y: 210 },
-  D: { x: 300, y: 50 },
-  E: { x: 300, y: 210 },
-  F: { x: 420, y: 130 },
-}
-
-/** Undirected weighted edges [u, v, w]. */
-const EDGES: ReadonlyArray<readonly [NodeId, NodeId, number]> = [
-  ['A', 'B', 4],
-  ['A', 'C', 2],
-  ['B', 'C', 1],
-  ['B', 'D', 5],
-  ['C', 'D', 8],
-  ['C', 'E', 5],
-  ['D', 'E', 2],
-  ['D', 'F', 6],
-  ['E', 'F', 3],
-]
 
 interface DijkstraState {
   /** Best-known distance from A to every node (Infinity = unreached). */
@@ -48,15 +23,6 @@ interface DijkstraState {
 
 const fmt = (n: number) => (n === Infinity ? '∞' : String(n))
 
-function neighborsOf(u: NodeId): Array<{ v: NodeId; w: number }> {
-  const out: Array<{ v: NodeId; w: number }> = []
-  for (const [a, b, w] of EDGES) {
-    if (a === u) out.push({ v: b, w })
-    else if (b === u) out.push({ v: a, w })
-  }
-  return out
-}
-
 function generateSteps(): Step<DijkstraState>[] {
   const steps: Step<DijkstraState>[] = []
   const dist: Record<NodeId, number> = { A: Infinity, B: Infinity, C: Infinity, D: Infinity, E: Infinity, F: Infinity }
@@ -74,10 +40,37 @@ function generateSteps(): Step<DijkstraState>[] {
     ...partial,
   })
 
+  /** dist as a readable map, e.g. "{A:0, B:4, C:∞, …}". */
+  const distStr = () => `{${NODES.map((n) => `${n}:${fmt(dist[n])}`).join(', ')}}`
+  /** Settled set in settle order, e.g. "{A, C, B}". */
+  const settledStr = () => (settled.length ? `{${settled.join(', ')}}` : '{}')
+  /** PQ = unsettled discovered nodes keyed by tentative dist, cheapest first. */
+  const pqStr = () => {
+    const entries = NODES.filter((n) => !settled.includes(n) && dist[n] < Infinity)
+      .slice()
+      .sort((a, b) => dist[a] - dist[b] || a.localeCompare(b))
+      .map((n) => `(${n},${dist[n]})`)
+    return `[${entries.join(', ')}]`
+  }
+
+  /** Same six variables, same order, on every step; `changed` lists the names this step assigned. */
+  const makeVars = (opts: { u?: NodeId | null; edge?: readonly [NodeId, NodeId] | null; w?: number | null; changed?: string[] }): VarEntry[] => {
+    const ch = new Set(opts.changed ?? [])
+    return [
+      { name: 'u', value: opts.u ?? '—', changed: ch.has('u') },
+      { name: 'dist', value: distStr(), changed: ch.has('dist') },
+      { name: 'settled', value: settledStr(), changed: ch.has('settled') },
+      { name: 'PQ', value: pqStr(), changed: ch.has('PQ') },
+      { name: '(u, v)', value: opts.edge ? `${opts.edge[0]}–${opts.edge[1]}` : '—', changed: ch.has('(u, v)') },
+      { name: 'w', value: opts.w != null ? String(opts.w) : '—', changed: ch.has('w') },
+    ]
+  }
+
   steps.push({
     state: snap({}),
     description: `Goal: find the cheapest path cost from ${SOURCE} to ALL ${NODES.length} nodes of this weighted graph. Start at ${SOURCE}: its distance is 0 (we are already there). Every other node gets ∞ — we have no idea how to reach them yet. The priority queue holds just (${SOURCE}, 0).`,
     codeLine: 0,
+    vars: makeVars({ changed: ['dist', 'PQ'] }),
   })
 
   while (settled.length < NODES.length) {
@@ -99,18 +92,21 @@ function generateSteps(): Step<DijkstraState>[] {
         state: snap({ current: u }),
         description: `Pop ${u} at distance 0 — trivially the closest node — and settle it. Settled means LOCKED: with no negative weights, no future discovery can ever beat 0.`,
         codeLine: 2,
+        vars: makeVars({ u, changed: ['u', 'settled', 'PQ'] }),
       })
     } else if (fresh.length === 0) {
       steps.push({
         state: snap({ current: u }),
         description: `Pop ${u} at distance ${dist[u]} and settle it — the last node. All its neighbors are already settled, so there is nothing left to relax.`,
         codeLine: 2,
+        vars: makeVars({ u, changed: ['u', 'settled', 'PQ'] }),
       })
     } else {
       steps.push({
         state: snap({ current: u }),
         description: `The closest unsettled node is ${u} at distance ${dist[u]}${runnersUp ? ` (beats ${runnersUp})` : ''}. Settle it: any other route to ${u} would detour through a node at least ${dist[u]} away, then add non-negative weight — it cannot win.`,
         codeLine: 2,
+        vars: makeVars({ u, changed: ['u', 'settled', 'PQ'] }),
       })
     }
 
@@ -123,12 +119,14 @@ function generateSteps(): Step<DijkstraState>[] {
           state: snap({ current: u, relaxEdge: [u, v], improved: true, flash: v }),
           description: `Relax ${u}–${v} (weight ${w}). Via ${u}: ${candidate - w} + ${w} = ${candidate} < ${fmt(old)} — improve ${v}! The cheapest known route to ${v} now runs through ${u}.`,
           codeLine: 6,
+          vars: makeVars({ u, edge: [u, v], w, changed: ['(u, v)', 'w', 'dist', 'PQ'] }),
         })
       } else {
         steps.push({
           state: snap({ current: u, relaxEdge: [u, v], improved: false }),
           description: `Relax ${u}–${v} (weight ${w}). Via ${u}: ${dist[u]} + ${w} = ${candidate} ≥ ${fmt(dist[v])} — no improvement. ${v} already has a cheaper route; keep ${fmt(dist[v])}.`,
           codeLine: 5,
+          vars: makeVars({ u, edge: [u, v], w, changed: ['(u, v)', 'w'] }),
         })
       }
     }
@@ -138,6 +136,7 @@ function generateSteps(): Step<DijkstraState>[] {
     state: snap({ done: true }),
     description: `All ${NODES.length} nodes settled. Final shortest distances from ${SOURCE}: ${NODES.map((n) => `${n}=${dist[n]}`).join(', ')}. Total work: ${NODES.length} pops and ${EDGES.length} edge relaxations — instead of enumerating all 42 simple paths from ${SOURCE} (13 to F alone). Each node was locked exactly once, in increasing order of distance — like ripples spreading outward.`,
     codeLine: 7,
+    vars: makeVars({}),
   })
 
   return steps
@@ -262,6 +261,7 @@ export const dijkstra: AlgorithmModule<DijkstraState> = {
       space: 'O(V) per active path',
       issues:
         'Shared prefixes are re-priced endlessly: the stretch A→C→B is the opening of dozens of the 42 paths, and its toll is re-summed for every single one. Nothing is ever declared finished, so even after stumbling on the best route to F the search keeps grinding through 12 worse ones. The path count grows factorially with the map; Dijkstra answers the same question with 6 pops and 9 edge relaxations by settling each town exactly once.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -285,6 +285,7 @@ export const dijkstra: AlgorithmModule<DijkstraState> = {
         'BFS reaches B in one hop and stamps it 4 via A–B — final, never revisited. But the two-hop route A→C→B costs 2 + 1 = 3. Same poison spreads to D: BFS records it at 4 + 5 = 9 via A→B→D, while the real cheapest is the three-hop A→C→B→D at 2 + 1 + 5 = 8. On a weighted map, fewer roads is not cheaper roads.',
       insight:
         'The expanding-ring picture is right — but the ring must grow by accumulated toll, not by hop count. Whatever comes next has to judge routes by their total cost.',
+      demo: hopsDemo,
     },
     {
       title: 'Greedy walk — always take the cheapest road out',
@@ -304,6 +305,7 @@ export const dijkstra: AlgorithmModule<DijkstraState> = {
         'Trace it: A takes A–C (2), C takes C–B (1, snubbing C–E at 5), B takes B–D (5), D takes D–E (2) — the walker reaches E carrying 2 + 1 + 5 + 2 = 10. But E’s true cheapest is 7, straight down the road it snubbed: A→C→E = 2 + 5. Optimizing the next edge in isolation lost the total.',
       insight:
         'One committed walker cannot do it. Keep a tentative best cost for EVERY town, and let any route that beats it overwrite — decisions must compare whole accumulated totals, never single edges.',
+      demo: greedyWalkDemo,
     },
     {
       title: 'Relax with a plain queue — let cheaper routes overwrite',
@@ -324,27 +326,30 @@ export const dijkstra: AlgorithmModule<DijkstraState> = {
         'It gets every answer right — but count the work. The queue pops D at a provisional 9 and dutifully relaxes all four of its roads (stamping F at 15). Then B improves to 3, drops D to 8, and D must be popped and fully re-relaxed — its second pass finds nothing, every check wasted. On this graph: 9 pops and 27 edge checks, versus the 6 pops and 9 relaxations the animation needs; B, D, and F are each processed twice, and on hostile graphs the re-work blows up to O(V · E).',
       insight:
         'All the re-processing came from popping towns whose costs were still provisional. Pop the unsettled town with the SMALLEST tentative cost instead, and no future route could ever undercut it — its number would already be final.',
+      demo: plainQueueDemo,
     },
     {
       title: 'Dijkstra — always pop the closest unsettled town',
       spark:
         'Swap the FIFO queue for a priority queue keyed by tentative cost, so the town you process is always the closest unsettled one — then its distance is final the moment you pop it, and it never needs a second look.',
       pseudocode: [
-        'dist[s] ← 0; dist[v] ← ∞ for all others; PQ ← {(0, s)}',
-        'while PQ not empty:',
-        '    u ← pop node with smallest dist  (u is now settled)',
-        '    for each edge (u, v) with weight w:',
-        '        if v settled: skip',
-        '        if dist[u] + w ≥ dist[v]: keep dist[v]',
-        '        else: dist[v] ← dist[u] + w; push (dist[v], v)',
+        ‘dist[s] ← 0; dist[v] ← ∞ for all others; PQ ← {(0, s)}’,
+        ‘while PQ not empty:’,
+        ‘    u ← pop node with smallest dist  (u is now settled)’,
+        ‘    for each edge (u, v) with weight w:’,
+        ‘        if v settled: skip’,
+        ‘        if dist[u] + w ≥ dist[v]: keep dist[v]’,
+        ‘        else: dist[v] ← dist[u] + w; push (dist[v], v)’,
+        ‘return dist’,
       ],
-      time: 'O((V + E) log V)',
-      space: 'O(V + E)',
-      verdict: 'optimal',
+      time: ‘O((V + E) log V)’,
+      space: ‘O(V + E)’,
+      verdict: ‘optimal’,
       breaks:
-        'Nothing is re-done: the 6 towns are popped exactly once each, in the order A(0), C(2), B(3), E(7), D(8), F(10), and a popped number never changes — D is relaxed at its true cost 8, never at a stale 9. Total work: 6 pops and 9 edge relaxations for a question whose brute force weighs 42 paths; the log V per heap operation is the entire price of always knowing who is closest.',
+        ‘Nothing is re-done: the 6 towns are popped exactly once each, in the order A(0), C(2), B(3), E(7), D(8), F(10), and a popped number never changes — D is relaxed at its true cost 8, never at a stale 9. Total work: 6 pops and 9 edge relaxations for a question whose brute force weighs 42 paths; the log V per heap operation is the entire price of always knowing who is closest.’,
       insight:
-        'The priority queue’s only job is to hand you the closest unsettled town — and with no negative tolls, that town’s cost is already unbeatable. That lock is the whole algorithm.',
+        ‘The priority queue’s only job is to hand you the closest unsettled town — and with no negative tolls, that town’s cost is already unbeatable. That lock is the whole algorithm.’,
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
