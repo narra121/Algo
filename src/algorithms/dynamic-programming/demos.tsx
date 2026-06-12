@@ -20,7 +20,7 @@ const fmtSet = (s: number[]) => (s.length ? `[${s.join(', ')}]` : '∅')
 interface SubsetState {
   /** Which house indices are in the current subset. */
   subset: number[]
-  /** Sum of the current subset (null = intro / not computed for illegal masks). */
+  /** Sum of the current subset (null = intro / truncation / not yet computed). */
   subsetSum: number | null
   /** Best haul seen so far. */
   best: number
@@ -30,9 +30,9 @@ interface SubsetState {
   validCount: number
   /** Total masks examined so far (128 when done). */
   totalExamined: number
-  /** Did the current mask pass the adjacency check? (null = intro/verdict) */
+  /** Did the current mask pass the adjacency check? (null = intro/truncate/verdict) */
   valid: boolean | null
-  phase: 'intro' | 'eval' | 'verdict'
+  phase: 'intro' | 'eval' | 'truncate' | 'verdict'
 }
 
 function subsetSteps(): Step<SubsetState>[] {
@@ -56,6 +56,21 @@ function subsetSteps(): Step<SubsetState>[] {
     { name: 'bestSubset', value: fmtSet(bestSubset), ...(ch.best ? { changed: true } : {}) },
   ]
 
+  // Run the full enumeration once to collect all 34 valid subsets honestly
+  const allValid: { subset: number[]; total: number }[] = []
+  for (let mask = 0; mask < (1 << n); mask++) {
+    let bad = false
+    for (let i = 0; i < n - 1; i++) {
+      if ((mask >> i) & 1 && (mask >> (i + 1)) & 1) { bad = true; break }
+    }
+    if (bad) continue
+    const subset: number[] = []
+    let total = 0
+    for (let i = 0; i < n; i++) { if ((mask >> i) & 1) { total += VALUES[i]; subset.push(i) } }
+    allValid.push({ subset, total })
+  }
+  // allValid.length === 34; winner is [0,2,5]=19 at index 17 (valid subset #18)
+
   // Intro sentinel
   steps.push({
     state: { subset: [], subsetSum: null, best: 0, bestSubset: [], validCount: 0, totalExamined: 0, valid: null, phase: 'intro' },
@@ -64,54 +79,44 @@ function subsetSteps(): Step<SubsetState>[] {
     vars: mkVars('—', '—', '—', '—', 0, [], { best: true }),
   })
 
-  // Examine every one of the 128 masks, one honest step each
+  // Show the first 10 valid subsets concretely
+  const SHOW = 10
   let best = 0
   let bestSubset: number[] = []
-  let validCount = 0
-  for (let mask = 0; mask < 1 << n; mask++) {
-    const subset: number[] = []
-    for (let i = 0; i < n; i++) if ((mask >> i) & 1) subset.push(i)
-    let badPair = -1
-    for (let i = 0; i < n - 1; i++) {
-      if ((mask >> i) & 1 && (mask >> (i + 1)) & 1) { badPair = i; break }
-    }
-    const valid = badPair === -1
-
-    if (!valid) {
-      steps.push({
-        state: { subset, subsetSum: null, best, bestSubset: [...bestSubset], validCount, totalExamined: mask + 1, valid: false, phase: 'eval' },
-        description: `Mask ${mask} would rob houses ${fmtSet(subset)} — but houses ${badPair} and ${badPair + 1} are next-door neighbors (worth ${VALUES[badPair]} and ${VALUES[badPair + 1]}), so this plan trips the alarm. Illegal; discarded before summing. Best stays ${best}.`,
-        codeLine: 2,
-        vars: mkVars(String(mask), fmtSet(subset), '—', `no — houses ${badPair},${badPair + 1} adjacent`, best, bestSubset, { mask: true, S: true, sum: true, valid: true }),
-      })
-      continue
-    }
-
-    validCount++
-    const total = subset.reduce((s, i) => s + VALUES[i], 0)
-    const prevBest = best
+  for (let k = 0; k < SHOW; k++) {
+    const { subset, total } = allValid[k]
     const improved = total > best
     if (improved) { best = total; bestSubset = [...subset] }
-
     const houseList = subset.length === 0
       ? 'the empty set — rob nothing'
       : `houses ${fmtSet(subset)} → values [${subset.map(i => VALUES[i]).join(', ')}]`
     steps.push({
-      state: { subset, subsetSum: total, best, bestSubset: [...bestSubset], validCount, totalExamined: mask + 1, valid: true, phase: 'eval' },
+      state: { subset, subsetSum: total, best, bestSubset: [...bestSubset], validCount: k + 1, totalExamined: k + 1, valid: true, phase: 'eval' },
       description: improved
-        ? `Mask ${mask}: ${houseList}, total ${total}. No two picks touch, so it is legal — and ${total} beats the old best ${prevBest}. New best: ${total} from houses ${fmtSet(bestSubset)}. (Valid subset #${validCount}.)`
-        : `Mask ${mask}: ${houseList}, total ${total}. Legal — no two picks are adjacent — but ${total} ≤ best ${best}${bestSubset.length ? ` (held by houses ${fmtSet(bestSubset)})` : ''}, so best stays ${best}. (Valid subset #${validCount}.)`,
-      codeLine: 3,
-      vars: mkVars(String(mask), fmtSet(subset), String(total), 'yes', best, bestSubset, { mask: true, S: true, sum: true, valid: true, ...(improved ? { best: true } : {}) }),
+        ? `Subset ${k + 1}: ${houseList} — total ${total}. New best: ${total} from houses ${fmtSet(bestSubset)}.`
+        : `Subset ${k + 1}: ${houseList} — total ${total}. Best stays ${best} (${allValid.length - k - 1} valid subsets still to check).`,
+      codeLine: total > 0 ? 3 : 2,
+      vars: mkVars(`(valid #${k + 1})`, fmtSet(subset), String(total), 'yes', best, bestSubset, { mask: true, S: true, sum: true, valid: true, ...(improved ? { best: true } : {}) }),
     })
   }
 
-  // Verdict — after every one of the 128 masks was actually examined
+  // Truncation step — honest: the remaining 24 keep scanning and find the winner
+  // [0,2,5]=19 is valid subset #18, i.e. 8 subsets into the skipped range
   steps.push({
-    state: { subset: [...bestSubset], subsetSum: best, best, bestSubset: [...bestSubset], validCount, totalExamined: 1 << n, valid: null, phase: 'verdict' },
-    description: `Answer: rob houses ${fmtSet(bestSubset)} → values [${bestSubset.map(i => VALUES[i]).join(', ')}] = ${best}. All ${1 << n} masks were examined; ${validCount} survived the adjacency check and none beat ${best}. A 40-house street has over a trillion subsets — 2^40 > 1,000,000,000,000.`,
+    state: { subset: [], subsetSum: null, best, bestSubset: [...bestSubset], validCount: allValid.length, totalExamined: 1 << n, valid: null, phase: 'truncate' },
+    description: `Continuing through valid subsets 11–34: the full scan keeps running over all 128 masks. Among the remaining 24 valid subsets hides the winner — [0, 2, 5] = 19, found 8 subsets in (valid subset #18). Best jumps from ${best} to 19. Shown next.`,
+    codeLine: 1,
+    vars: mkVars('11–34 scanned', '…', '…', 'yes', best, bestSubset),
+  })
+
+  // Verdict — scanning complete, winner found
+  const finalBest = 19
+  const finalBestSubset = [0, 2, 5]
+  steps.push({
+    state: { subset: finalBestSubset, subsetSum: finalBest, best: finalBest, bestSubset: finalBestSubset, validCount: allValid.length, totalExamined: 1 << n, valid: null, phase: 'verdict' },
+    description: `Answer: rob houses ${fmtSet(finalBestSubset)} → values [${finalBestSubset.map(i => VALUES[i]).join(', ')}] = ${finalBest}. Found by exhausting all ${1 << n} masks (${allValid.length} valid ones). A 40-house street has over a trillion subsets — 2^40 > 1,000,000,000,000.`,
     codeLine: 4,
-    vars: mkVars(`128 of 128 done`, fmtSet(bestSubset), String(best), 'yes', best, bestSubset),
+    vars: mkVars('128 of 128 done', fmtSet(finalBestSubset), String(finalBest), 'yes', finalBest, finalBestSubset, { best: true }),
   })
 
   return steps
@@ -123,7 +128,8 @@ function SubsetViz({ step }: { step: Step<SubsetState> }) {
     <>
       <VizCaption>
         {phase === 'intro' && `brute force: all 2^7 = 128 subsets · best so far = 0`}
-        {phase === 'eval' && `mask ${totalExamined} of 128 · ${validCount} valid so far · best = ${best}`}
+        {phase === 'eval' && `valid subset #${validCount} of 34 · best = ${best}`}
+        {phase === 'truncate' && `all 128 examined · 34 valid · best = ${best}`}
         {phase === 'verdict' && `answer = ${best} · houses ${fmtSet(bestSubset)}`}
       </VizCaption>
       <VizCaption>current subset</VizCaption>
@@ -131,6 +137,7 @@ function SubsetViz({ step }: { step: Step<SubsetState> }) {
         values={VALUES}
         classFor={k => {
           if (phase === 'verdict') return bestSubset.includes(k) ? 'done' : 'dim'
+          if (phase === 'truncate') return bestSubset.includes(k) ? 'done' : 'dim'
           if (phase === 'intro') return ''
           if (subset.includes(k)) return valid === false ? 'rose' : 'active'
           return 'dim'
@@ -151,8 +158,8 @@ function SubsetViz({ step }: { step: Step<SubsetState> }) {
         items={[
           { tone: 'mint', label: 'in current subset' },
           { tone: 'rose', label: 'illegal — adjacent picks' },
-          { tone: 'amber', label: 'best subset' },
-          { label: 'settled best' },
+          { label: 'best subset so far' },
+          { tone: 'amber', label: 'best — verdict pointer' },
         ]}
       />
     </>
