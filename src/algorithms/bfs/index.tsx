@@ -1,27 +1,10 @@
 import type { CSSProperties } from 'react'
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
+import { naiveDemo, dfsFirstDemo, greedyDemo, idDemo } from './demos'
+import { ROWS, COLS, MAZE, START, TARGET, isWall, idx } from './data'
 
 /* Canonical example: shortest path through a 6×8 grid maze from S (top-left)
    to T (bottom-right), expanding outward one wave at a time. */
-
-const ROWS = 6
-const COLS = 8
-
-/* '#' = wall, 'S' = start, 'T' = target, '.' = open floor. */
-const MAZE = [
-  'S..#....',
-  '.#.#.##.',
-  '.#......',
-  '.####.#.',
-  '....#.#.',
-  '..#...#T',
-]
-
-const START = 0 // r*COLS + c of S → (0,0)
-const TARGET = 5 * COLS + 7 // (5,7)
-
-const isWall = (r: number, c: number) => MAZE[r][c] === '#'
-const idx = (r: number, c: number) => r * COLS + c
 
 type Phase = 'explore' | 'found' | 'trace' | 'done'
 
@@ -41,6 +24,46 @@ interface BFSState {
 
 const copyDist = (d: number[][]) => d.map((row) => [...row])
 
+/* ── helpers for narration + the variables panel ────────────────────────── */
+
+const DIRS = [
+  [-1, 0, 'up'],
+  [1, 0, 'down'],
+  [0, -1, 'left'],
+  [0, 1, 'right'],
+] as const
+
+/** Open (non-wall) cells in the maze — 33 on this grid. */
+const OPEN_CELLS = MAZE.join('').split('').filter((ch) => ch !== '#').length
+
+const cellName = (i: number): string =>
+  i === START ? 'S' : i === TARGET ? 'T' : `(${Math.floor(i / COLS)},${i % COLS})`
+
+const fmtQueue = (cells: number[]): string => `[${cells.map(cellName).join(', ')}]`
+const fmtPath = (cells: number[]): string => cells.map(cellName).join('→')
+
+interface LiveVars {
+  cell: string
+  distCell: string
+  queue: string
+  visited: string
+  distT: string
+  path: string
+}
+
+/** Same six pseudocode variables, in the same order, on every step. */
+const mkVars = (v: LiveVars, changed: string[] = []): VarEntry[] => {
+  const ch = new Set(changed)
+  return [
+    { name: 'cell', value: v.cell, changed: ch.has('cell') },
+    { name: 'dist[cell]', value: v.distCell, changed: ch.has('dist[cell]') },
+    { name: 'queue', value: v.queue, changed: ch.has('queue') },
+    { name: 'visited', value: v.visited, changed: ch.has('visited') },
+    { name: 'dist[T]', value: v.distT, changed: ch.has('dist[T]') },
+    { name: 'path', value: v.path, changed: ch.has('path') },
+  ]
+}
+
 function generateSteps(): Step<BFSState>[] {
   const steps: Step<BFSState>[] = []
   const dist: number[][] = Array.from({ length: ROWS }, () => Array(COLS).fill(-1))
@@ -48,59 +71,137 @@ function generateSteps(): Step<BFSState>[] {
 
   dist[0][0] = 0
   let frontier: number[] = [START]
+  let stamped = 1
+  let distT = '—'
+  const visitedStr = () => `${stamped} / ${OPEN_CELLS} cells`
 
   steps.push({
     state: { dist: copyDist(dist), frontier: [...frontier], wave: 0, queueSize: 1, path: [], phase: 'explore' },
     description:
-      'Goal: find the FEWEST moves from S (top-left) to T (bottom-right) through this 6×8 maze, stepping up/down/left/right around the walls. Start at S with distance 0 — it is the only cell in the queue. BFS will pour outward like water: every cell in wave k is exactly k moves from S, no exceptions.',
+      'Goal: find the FEWEST moves from S (top-left) to T (bottom-right) through this 6×8 maze, stepping up/down/left/right around the walls. Start at S(0,0): dist[S] ← 0 and S is the only cell in the queue. BFS will pour outward like water — every cell in wave k is exactly k moves from S, no exceptions.',
     codeLine: 0,
-  })
-
-  steps.push({
-    state: { dist: copyDist(dist), frontier: [...frontier], wave: 0, queueSize: 1, path: [], phase: 'explore' },
-    description:
-      'Dequeue S and inspect its 4 neighbors: up and left are out of bounds, but right (0,1) and down (1,0) are open floor — they will form the first wave.',
-    codeLine: 2,
+    vars: mkVars(
+      { cell: '—', distCell: '—', queue: '[S]', visited: visitedStr(), distT, path: '—' },
+      ['queue', 'visited'],
+    ),
   })
 
   let wave = 0
   let found = false
+  let dequeues = 0
+  let lastCellName = '—'
+  let lastDistCell = '—'
+
   while (frontier.length > 0 && !found) {
     const next: number[] = []
-    for (const cell of frontier) {
+    for (let fi = 0; fi < frontier.length; fi++) {
+      const cell = frontier[fi]
       const r = Math.floor(cell / COLS)
       const c = cell % COLS
-      for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+      const clauses: string[] = []
+      let gained = 0
+      let touchedT = false
+
+      for (const [dr, dc, dir] of DIRS) {
         const nr = r + dr
         const nc = c + dc
-        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue
-        if (isWall(nr, nc) || dist[nr][nc] !== -1) continue
+        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) {
+          clauses.push(`${dir} is off the grid`)
+          continue
+        }
+        if (isWall(nr, nc)) {
+          clauses.push(`${dir} (${nr},${nc}) is a wall`)
+          continue
+        }
+        if (dist[nr][nc] !== -1) {
+          clauses.push(`${dir} (${nr},${nc}) was already stamped ${dist[nr][nc]} — first touch was final, skip it`)
+          continue
+        }
         dist[nr][nc] = wave + 1
         parent.set(idx(nr, nc), cell)
         next.push(idx(nr, nc))
+        stamped++
+        gained++
+        if (idx(nr, nc) === TARGET) {
+          touchedT = true
+          clauses.push(`${dir} is T(5,7) itself — open, stamped ${wave + 1} and enqueued`)
+        } else {
+          clauses.push(`${dir} (${nr},${nc}) is open — stamped ${wave + 1} and enqueued`)
+        }
       }
+
+      if (touchedT) distT = String(wave + 1)
+      dequeues++
+
+      const who = cell === START ? 'S(0,0)' : `(${r},${c})`
+      let lead: string
+      if (cell === START) {
+        lead = 'Dequeue S(0,0), the only distance-0 cell; whatever it first-touches is exactly 1 move from S, and that number is final.'
+      } else {
+        const leads = [
+          `Dequeue ${who} at distance ${wave} — any cell it first-touches now is provably ${wave + 1} moves from S, sealed on contact.`,
+          `Next out of the queue is ${who} (distance ${wave}); its four sides are checked in up/down/left/right order.`,
+          `Dequeue ${who} (distance ${wave}); whatever is still unstamped around it joins wave ${wave + 1}.`,
+        ]
+        lead = leads[dequeues % leads.length]
+      }
+      const body = clauses.join('; ')
+      let tail = ''
+      if (touchedT) {
+        tail = ` First touch IS shortest: a cheaper route to T would have arrived in an earlier wave, and none did.`
+      } else if (gained === 0) {
+        tail = ' Nothing new — every side is a wall, an edge, or already stamped; this arm of the flood is spent.'
+      }
+      const description = `${lead} ${body.charAt(0).toUpperCase()}${body.slice(1)}.${tail}`
+
+      lastCellName = cellName(cell)
+      lastDistCell = String(wave)
+      const queueAfter = [...frontier.slice(fi + 1), ...next]
+
+      steps.push({
+        state: { dist: copyDist(dist), frontier: [...next], wave: wave + 1, queueSize: queueAfter.length, path: [], phase: 'explore' },
+        description,
+        codeLine: gained > 0 ? 6 : 5,
+        vars: mkVars(
+          { cell: lastCellName, distCell: lastDistCell, queue: fmtQueue(queueAfter), visited: visitedStr(), distT, path: '—' },
+          gained > 0
+            ? touchedT
+              ? ['cell', 'dist[cell]', 'queue', 'visited', 'dist[T]']
+              : ['cell', 'dist[cell]', 'queue', 'visited']
+            : ['cell', 'dist[cell]', 'queue'],
+        ),
+      })
     }
+
     wave++
     found = next.includes(TARGET)
 
-    let description: string
     if (found) {
-      description = `Wave ${wave} touches T! The very first time BFS reaches a cell IS its shortest distance — so T is exactly ${wave} moves from S, and no cheaper route can exist (a cheaper one would have arrived in an earlier wave).`
-    } else if (wave === 1) {
-      description = `Wave 1: dequeue S and enqueue its ${next.length} open neighbors — right and down. Both get distance 1. The wall at column 3 already fences off the top-right; the flood must find a way around.`
-    } else if (wave === 5) {
-      description = `Wave 5: the ${frontier.length} frontier cells fan out into ${next.length} new cells, all stamped distance 5. The flood has split — one arm crawls down the left edge, another squeezes through the corridor in row 2.`
-    } else if (wave === 8) {
-      description = `Wave 8: ${next.length} cells get distance 8 — the widest wave yet. The arm that threaded the row-2 corridor now wraps back up into the top-right pocket the walls had sealed off. No cell is ever visited twice.`
+      steps.push({
+        state: { dist: copyDist(dist), frontier: [...next], wave, queueSize: next.length, path: [], phase: 'found' },
+        description: `Wave ${wave} is complete — and T is in it! The very first time BFS reaches a cell IS its shortest distance, so T is exactly ${wave} moves from S and no cheaper route can exist (it would have arrived in an earlier wave). Everything still queued is also distance ${wave}, so the moment T comes off the queue the loop breaks.`,
+        codeLine: 3,
+        vars: mkVars(
+          { cell: lastCellName, distCell: lastDistCell, queue: fmtQueue(next), visited: visitedStr(), distT, path: '—' },
+          [],
+        ),
+      })
     } else {
-      description = `Wave ${wave}: the ${frontier.length} frontier cell${frontier.length === 1 ? '' : 's'} at distance ${wave - 1} each check up/down/left/right; ${next.length} unvisited open neighbor${next.length === 1 ? '' : 's'} get${next.length === 1 ? 's' : ''} distance ${wave} and join the queue.`
+      const names = next.map(cellName).join(', ')
+      const tail =
+        wave % 2 === 1
+          ? `The queue now holds exactly this frontier — and nothing cheaper is left anywhere ahead of it.`
+          : `None of them was ever touched before, which is precisely why ${wave} is already their final shortest distance.`
+      steps.push({
+        state: { dist: copyDist(dist), frontier: [...next], wave, queueSize: next.length, path: [], phase: 'explore' },
+        description: `Wave ${wave} is complete: ${next.length} cell${next.length === 1 ? '' : 's'} — ${names} — now hold${next.length === 1 ? 's' : ''} distance ${wave}. ${tail}`,
+        codeLine: 1,
+        vars: mkVars(
+          { cell: lastCellName, distCell: lastDistCell, queue: fmtQueue(next), visited: visitedStr(), distT, path: '—' },
+          [],
+        ),
+      })
     }
-
-    steps.push({
-      state: { dist: copyDist(dist), frontier: [...next], wave, queueSize: next.length, path: [], phase: found ? 'found' : 'explore' },
-      description,
-      codeLine: found ? 3 : 6,
-    })
     frontier = next
   }
 
@@ -113,23 +214,36 @@ function generateSteps(): Step<BFSState>[] {
   }
   path.reverse()
 
+  const leftoverQueue = fmtQueue(frontier)
   const half = path.slice(Math.floor(path.length / 2))
   steps.push({
     state: { dist: copyDist(dist), frontier: [], wave, queueSize: 0, path: [...half], phase: 'trace' },
-    description: `Every cell remembered which neighbor discovered it. Start at T (distance ${wave}) and hop to its parent (${wave - 1}), then ${wave - 2}, ${wave - 3}… — each parent link moves exactly one wave closer to S, so the walk-back cannot wander.`,
+    description: `Every cell remembered which neighbor discovered it. Start at T (distance ${wave}) and hop parent by parent — ${fmtPath([...half].reverse())} — each link lands exactly one wave closer to S, so the walk-back cannot wander.`,
     codeLine: 7,
+    vars: mkVars(
+      { cell: lastCellName, distCell: lastDistCell, queue: leftoverQueue, visited: visitedStr(), distT, path: fmtPath(half) },
+      ['path'],
+    ),
   })
 
   steps.push({
     state: { dist: copyDist(dist), frontier: [], wave, queueSize: 0, path: [...path], phase: 'trace' },
-    description: `The walk-back reaches S at distance 0, revealing one concrete shortest route of ${path.length} cells — read the highlighted distances and they count up 0, 1, 2, … ${wave} with no gaps.`,
+    description: `The walk-back reaches S at distance 0. Read forward, the route is ${fmtPath(path)} — ${path.length} cells whose stamped distances count up 0, 1, 2, … ${wave} with no gaps.`,
     codeLine: 7,
+    vars: mkVars(
+      { cell: lastCellName, distCell: lastDistCell, queue: leftoverQueue, visited: visitedStr(), distT, path: fmtPath(path) },
+      ['path'],
+    ),
   })
 
   steps.push({
     state: { dist: copyDist(dist), frontier: [], wave, queueSize: 0, path: [...path], phase: 'done' },
-    description: `Done: shortest path is ${wave} moves — found and PROVED minimal in just 33 cell visits (each of the 33 open cells touched exactly once), versus the 165 backtracking steps a try-every-route search burns on this same maze. The proof is free: waves leave in strict distance order, so nothing at distance ${wave} can be dequeued before everything at distance ${wave - 1}.`,
+    description: `Done: the shortest path is ${wave} moves — found and PROVED minimal after touching ${stamped} of the ${OPEN_CELLS} open cells, each at most once, versus the 165 backtracking steps a try-every-route search burns on this same maze. The proof is free: the queue releases cells in non-decreasing distance order, so nothing at distance ${wave} can be dequeued before everything at distance ${wave - 1}.`,
     codeLine: 7,
+    vars: mkVars(
+      { cell: lastCellName, distCell: lastDistCell, queue: leftoverQueue, visited: visitedStr(), distT, path: fmtPath(path) },
+      [],
+    ),
   })
 
   return steps
@@ -227,6 +341,7 @@ export const bfs: AlgorithmModule<BFSState> = {
       space: 'O(path length)',
       issues:
         'It cannot declare ANY answer final until every last route is exhausted — only after seeing all 6 routes can it swear nothing beats 12. The same cell gets re-walked once per route that passes through it, so shared prefixes are re-explored again and again, and the route count explodes exponentially as the maze grows. BFS earns the same minimality guarantee by visiting each of the 33 reachable cells exactly once.',
+      demo: naiveDemo,
     },
   },
   aha:
@@ -251,6 +366,7 @@ export const bfs: AlgorithmModule<BFSState> = {
         'Which route comes back first is an accident of neighbor ordering, not of length. On this exact maze, a DFS that tries down before right returns a 20-move route; prefer down-then-left and it proudly returns 26 — more than double the true 12. A right-first order happens to luck into 12 here, which is the most dangerous outcome of all: it looks correct until the next maze.',
       insight:
         'DFS commits to one route all the way to the end before trying another, so "first found" carries no distance information. To make first-found mean something, you must control the ORDER in which routes get explored.',
+      demo: dfsFirstDemo,
     },
     {
       title: 'Steer greedily toward the target',
@@ -271,6 +387,7 @@ export const bfs: AlgorithmModule<BFSState> = {
         'Walls do not care about geometry. From S, down and right both leave the gap at 11 — a coin flip. Pick down and the walk slides along the left edge to (5,1), where after 6 moves it is wedged: (5,2) is a wall, and the only open neighbor (4,1) moves AWAY from T, which the rule forbids. Pick right and it threads the 12-move route — pure luck; the rule cannot tell a corridor from a dead end.',
       insight:
         'Local direction cannot be trusted in a maze. The only quantity that never lies is the move count itself — so organize the search by distance walked, not by compass heading.',
+      demo: greedyDemo,
     },
     {
       title: 'Iterative deepening — cap the depth, raise the cap',
@@ -290,6 +407,7 @@ export const bfs: AlgorithmModule<BFSState> = {
         'Finally correct: cap 12 is the first to touch T, and that PROVES 12 is minimal without enumerating all 6 routes. But every new cap restarts from scratch, so caps 1 through 12 burn 250 cell visits on this maze — even more than the 165 the exhaustive search took — because the cells near S get re-walked twelve times over.',
       insight:
         'The cap idea is exactly right — finish distance 1 completely, then distance 2, then 3. The waste is the restart. Keep each finished distance layer alive, and grow the next layer directly from it.',
+      demo: idDemo,
     },
     {
       title: 'BFS — expand the whole frontier one wave at a time',
@@ -311,6 +429,7 @@ export const bfs: AlgorithmModule<BFSState> = {
         'Nothing is re-walked and nothing is guessed: each of the 33 reachable cells is stamped with a distance the moment it is first touched and never enters the queue again. The queue releases cells in non-decreasing distance order, so when wave 12 touches T, everything at distance 11 is already finished — a cheaper route would have arrived in an earlier wave. 33 visits buy the proof that cost backtracking 165 steps.',
       insight:
         'First touch IS the shortest distance, sealed forever — which is exactly the aha below.',
+      demo: { generateSteps, Visualizer },
     },
   ],
   intuition: [
