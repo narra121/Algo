@@ -1,4 +1,4 @@
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
 import { bsearchDemo, hashDemo, naiveDemo } from './demos'
 import { ARR, TARGET } from './data'
 
@@ -12,6 +12,22 @@ interface TPState {
   verdict: 'low' | 'high' | 'hit' | null
 }
 
+const fmtIdx = (i: number) => `${i} (=${ARR[i]})`
+
+function tpVars(
+  left: number,
+  right: number,
+  sum: number | null,
+  changed: { left?: boolean; right?: boolean; sum?: boolean } = {},
+): VarEntry[] {
+  return [
+    { name: 'left', value: fmtIdx(left), changed: changed.left },
+    { name: 'right', value: fmtIdx(right), changed: changed.right },
+    { name: 'sum', value: sum === null ? '—' : String(sum), changed: changed.sum },
+    { name: 'target', value: String(TARGET) },
+  ]
+}
+
 function generateSteps(): Step<TPState>[] {
   const steps: Step<TPState>[] = []
   let left = 0
@@ -21,6 +37,7 @@ function generateSteps(): Step<TPState>[] {
     state: { arr: ARR, left, right, sum: null, verdict: null },
     description: `Array is sorted. Place LEFT at the smallest value (${ARR[left]}) and RIGHT at the largest (${ARR[right]}). Target sum = ${TARGET}.`,
     codeLine: 0,
+    vars: tpVars(left, right, null, { left: true, right: true }),
   })
 
   while (left < right) {
@@ -28,31 +45,42 @@ function generateSteps(): Step<TPState>[] {
     if (sum === TARGET) {
       steps.push({
         state: { arr: ARR, left, right, sum, verdict: 'hit' },
-        description: `${ARR[left]} + ${ARR[right]} = ${sum} — exactly the target! Found the pair without checking all ${(ARR.length * (ARR.length - 1)) / 2} combinations.`,
+        description: `${ARR[left]} + ${ARR[right]} = ${sum} — exactly the target! Found the pair at indices ${left} and ${right} without checking all ${(ARR.length * (ARR.length - 1)) / 2} combinations.`,
         codeLine: 3,
+        vars: tpVars(left, right, sum, { sum: true }),
       })
       return steps
     }
-    if (sum < TARGET) {
+    const movedLeft = sum < TARGET
+    if (movedLeft) {
       steps.push({
         state: { arr: ARR, left, right, sum, verdict: 'low' },
-        description: `${ARR[left]} + ${ARR[right]} = ${sum} < ${TARGET}. Too small — and every other pair using LEFT would be even smaller. Discard LEFT, move it right.`,
+        description: `${ARR[left]} + ${ARR[right]} = ${sum} < ${TARGET}. Too small — ${ARR[right]} is the largest partner ${ARR[left]} will ever get, so ${ARR[left]} can never reach ${TARGET} with anyone. Discard LEFT, move it right.`,
         codeLine: 4,
+        vars: tpVars(left, right, sum, { sum: true }),
       })
       left++
+      steps.push({
+        state: { arr: ARR, left, right, sum: null, verdict: null },
+        description: `LEFT advances to index ${left} (=${ARR[left]}); ${ARR[left - 1]} is permanently out. ${right - left + 1} candidates remain between the pointers — one comparison, one elimination.`,
+        codeLine: 1,
+        vars: tpVars(left, right, sum, { left: true }),
+      })
     } else {
       steps.push({
         state: { arr: ARR, left, right, sum, verdict: 'high' },
-        description: `${ARR[left]} + ${ARR[right]} = ${sum} > ${TARGET}. Too big — and every other pair using RIGHT would be even bigger. Discard RIGHT, move it left.`,
+        description: `${ARR[left]} + ${ARR[right]} = ${sum} > ${TARGET}. Too big — ${ARR[left]} is the smallest partner ${ARR[right]} will ever get, so ${ARR[right]} overshoots ${TARGET} with everyone. Discard RIGHT, move it left.`,
         codeLine: 5,
+        vars: tpVars(left, right, sum, { sum: true }),
       })
       right--
+      steps.push({
+        state: { arr: ARR, left, right, sum: null, verdict: null },
+        description: `RIGHT retreats to index ${right} (=${ARR[right]}); ${ARR[right + 1]} is permanently out. ${right - left + 1} candidates remain between the pointers — one comparison, one elimination.`,
+        codeLine: 1,
+        vars: tpVars(left, right, sum, { right: true }),
+      })
     }
-    steps.push({
-      state: { arr: ARR, left, right, sum: null, verdict: null },
-      description: `Pointers now at ${ARR[left]} and ${ARR[right]}. Each comparison permanently eliminates one element — that's the magic.`,
-      codeLine: 1,
-    })
   }
   return steps
 }

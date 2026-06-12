@@ -7,6 +7,7 @@ import { PseudocodePanel } from './PseudocodePanel'
 import { ProblemsList } from './ProblemsList'
 import { JourneyPanel } from './JourneyPanel'
 import { Narration } from './Narration'
+import { VariablesPanel } from './VariablesPanel'
 
 function NaiveCard({ naive, optimal }: { naive: NaiveApproach; optimal: Complexity }) {
   const [hot, setHot] = useState(-1)
@@ -110,6 +111,7 @@ export function AlgorithmPage({ algo, onBack }: { algo: AlgorithmModule; onBack:
           <div className="viz-stage">
             <Visualizer step={player.step} />
           </div>
+          <VariablesPanel vars={player.step.vars} />
           <PlayerControls player={player} />
           <div style={{ height: 14 }} />
           <Narration key={player.index} text={player.step.description} />

@@ -400,6 +400,75 @@ button {
   gap: 18px;
 }
 
+/* ---------- live variables panel ---------- */
+
+.vars-panel {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: rgba(10, 15, 34, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.vars-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.var-chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: rgba(20, 28, 58, 0.85);
+  transition: border-color 0.25s ease;
+}
+
+.var-chip .var-name {
+  padding: 4px 8px;
+  color: var(--muted);
+  background: rgba(124, 143, 255, 0.08);
+  border-right: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.var-chip .var-value {
+  padding: 4px 10px;
+  color: var(--ink);
+  white-space: nowrap;
+  max-width: 420px;
+  overflow-x: auto;
+}
+
+.var-chip.changed {
+  border-color: var(--mint);
+  animation: varflash 0.7s ease-out;
+}
+
+.var-chip.changed .var-name {
+  color: var(--mint);
+}
+
+@keyframes varflash {
+  0% {
+    background: var(--mint-dim);
+    transform: translateY(2px);
+  }
+  100% {
+    background: rgba(20, 28, 58, 0.85);
+    transform: translateY(0);
+  }
+}
+
+.mini-player .vars-panel {
+  margin-bottom: 0;
+}
+
 /* ---------- problem card & aha banner ---------- */
 
 .problem-card {

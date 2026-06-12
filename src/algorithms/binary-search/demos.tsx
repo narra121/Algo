@@ -1,4 +1,4 @@
-import type { AttemptDemo, Step } from '../../core/types'
+import type { AttemptDemo, Step, VarEntry } from '../../core/types'
 import { Cells, Legend, VizCaption } from '../../components/vizPrimitives'
 import { ARR, TARGET } from './data'
 
@@ -20,11 +20,22 @@ interface LinearState {
 function linearSteps(): Step<LinearState>[] {
   const steps: Step<LinearState>[] = []
 
+  const mkVars = (i: number | null, checks: number, changed: string[] = []): VarEntry[] => {
+    const c = (n: string) => (changed.includes(n) ? { changed: true } : {})
+    return [
+      { name: 'i', value: i === null ? '—' : String(i), ...c('i') },
+      { name: 'a[i]', value: i === null || i >= ARR.length ? '—' : String(ARR[i]), ...c('a[i]') },
+      { name: 'target', value: String(TARGET), ...c('target') },
+      { name: 'checks', value: String(checks), ...c('checks') },
+    ]
+  }
+
   // Intro — sentinel i = -1
   steps.push({
     state: { i: -1, checks: 0, found: false },
     description: `Linear scan: inspect every element from index 0 onward until we find ${TARGET}. The array is sorted — but we are about to ignore that completely.`,
     codeLine: 0,
+    vars: mkVars(null, 0, ['target']),
   })
 
   let checks = 0
@@ -35,6 +46,7 @@ function linearSteps(): Step<LinearState>[] {
         state: { i, checks, found: true },
         description: `Check ${checks}: a[${i}] = ${ARR[i]} — match! Found ${TARGET} at index ${i} after ${checks} comparisons. A sorted array offered a shortcut at every step, and we used none of it.`,
         codeLine: 2,
+        vars: mkVars(i, checks, ['i', 'a[i]', 'checks']),
       })
       return steps
     }
@@ -42,6 +54,7 @@ function linearSteps(): Step<LinearState>[] {
       state: { i, checks, found: false },
       description: `Check ${checks}: a[${i}] = ${ARR[i]} ≠ ${TARGET}. Move on — we learned nothing about the ${ARR.length - i - 1} elements still ahead.`,
       codeLine: 1,
+      vars: mkVars(i, checks, ['i', 'a[i]', 'checks']),
     })
   }
 
@@ -50,6 +63,7 @@ function linearSteps(): Step<LinearState>[] {
     state: { i: ARR.length, checks, found: false },
     description: `Scanned all ${ARR.length} elements, ${TARGET} not found. ${checks} comparisons wasted — each eliminated exactly one candidate instead of half.`,
     codeLine: 3,
+    vars: mkVars(ARR.length, checks, ['i']),
   })
   return steps
 }
@@ -105,11 +119,23 @@ function hashMapSteps(): Step<HashMapState>[] {
   const steps: Step<HashMapState>[] = []
   const map = new Map<number, number>()
 
+  const mkVars = (i: number | null, lookup: number | null | 'pending', changed: string[] = []): VarEntry[] => {
+    const c = (n: string) => (changed.includes(n) ? { changed: true } : {})
+    return [
+      { name: 'i', value: i === null ? '—' : String(i), ...c('i') },
+      { name: 'a[i]', value: i === null ? '—' : String(ARR[i]), ...c('a[i]') },
+      { name: '|index|', value: String(map.size), ...c('|index|') },
+      { name: 'target', value: String(TARGET), ...c('target') },
+      { name: 'index[target]', value: lookup === 'pending' ? '—' : lookup === null ? 'absent' : String(lookup), ...c('index[target]') },
+    ]
+  }
+
   // Intro sentinel
   steps.push({
     state: { phase: 'build', buildIdx: -1, map: [], found: false, foundAt: null },
     description: `Hash-map approach: first pour all ${ARR.length} values into a map (value → index), then answer "where is ${TARGET}?" in one O(1) lookup. Watch the build cost accumulate.`,
     codeLine: 0,
+    vars: mkVars(null, 'pending', ['target']),
   })
 
   // Build phase — insert every element
@@ -119,6 +145,7 @@ function hashMapSteps(): Step<HashMapState>[] {
       state: { phase: 'build', buildIdx: i, map: [...map.entries()], found: false, foundAt: null },
       description: `Insert ${i + 1}/${ARR.length}: map[${ARR[i]}] = ${i}. That is ${i + 1} write${i + 1 === 1 ? '' : 's'} before we can answer a single query.`,
       codeLine: 2,
+      vars: mkVars(i, 'pending', ['i', 'a[i]', '|index|']),
     })
   }
 
@@ -130,6 +157,7 @@ function hashMapSteps(): Step<HashMapState>[] {
       ? `Lookup: is ${TARGET} in the map? YES — index ${foundAt}, O(1). But we paid ${ARR.length} insertions + O(n) memory to get here. The array was already sorted — that IS an index, and we built a second one from scratch instead of using it.`
       : `Lookup: is ${TARGET} in the map? No. ${ARR.length} insertions, O(n) memory, and the sortedness was never consulted once.`,
     codeLine: 3,
+    vars: mkVars(ARR.length - 1, foundAt, ['index[target]']),
   })
 
   return steps
@@ -206,6 +234,26 @@ function jumpSteps(): Step<JumpState>[] {
   const step = Math.floor(Math.sqrt(n))  // 3
   const steps: Step<JumpState>[] = []
 
+  /** step = stride, i = leap probe, k = scan cursor inside the final block. */
+  const mkVars = (
+    stride: number | null,
+    i: number | null,
+    k: number | null,
+    probes: number,
+    changed: string[] = [],
+  ): VarEntry[] => {
+    const c = (nm: string) => (changed.includes(nm) ? { changed: true } : {})
+    return [
+      { name: 'step', value: stride === null ? '—' : String(stride), ...c('step') },
+      { name: 'i', value: i === null ? '—' : i >= n ? `${i} (≥ n)` : String(i), ...c('i') },
+      { name: 'a[i]', value: i === null || i >= n ? '—' : String(ARR[i]), ...c('a[i]') },
+      { name: 'k', value: k === null ? '—' : String(k), ...c('k') },
+      { name: 'a[k]', value: k === null ? '—' : String(ARR[k]), ...c('a[k]') },
+      { name: 'target', value: String(TARGET), ...c('target') },
+      { name: 'probes', value: String(probes), ...c('probes') },
+    ]
+  }
+
   // Simulate binary search on ARR/TARGET to get the honest probe count for the narration.
   let bsProbes = 0
   {
@@ -224,26 +272,32 @@ function jumpSteps(): Step<JumpState>[] {
     state: { phase: 'leap', i: -1, blockStart: null, blockEnd: null, scanIdx: null, leaps: 0, probes: 0, found: false, foundAt: null },
     description: `Jump search exploits sortedness to skip elements in bulk: instead of checking one by one, leap ahead in strides of ⌊√n⌋ positions and only scan the single block where the target can hide.`,
     codeLine: 0,
+    vars: mkVars(null, null, null, 0, ['target']),
   })
   steps.push({
     state: { phase: 'leap', i: step - 1, blockStart: null, blockEnd: null, scanIdx: null, leaps: 0, probes: 0, found: false, foundAt: null },
     description: `n = ${n}, so stride = ⌊√${n}⌋ = ${step}. First probe lands at index ${step - 1} (value ${ARR[step - 1]}). If it's below ${TARGET}, leap ${step} ahead; if it overshoots, back up and linearly scan that last block of ≤ ${step} cells.`,
     codeLine: 0,
+    vars: mkVars(step, step - 1, null, 0, ['step', 'i', 'a[i]']),
   })
 
   // Leap phase — emit one step per probe (including the overshoot probe)
   let i = step - 1   // 2
   let leaps = 0
   let probes = 0
+  let firstLeap = true
 
   while (i < n) {
     leaps++
     probes++
+    const leapChanged = firstLeap ? ['probes'] : ['i', 'a[i]', 'probes']
+    firstLeap = false
     if (ARR[i] === TARGET) {
       steps.push({
         state: { phase: 'done', i, blockStart: i, blockEnd: i, scanIdx: i, leaps, probes, found: true, foundAt: i },
         description: `Leap ${leaps}: probe a[${i}] = ${ARR[i]} — exact match at stride landing! Found ${TARGET} at index ${i} in ${probes} total probes. Lucky, but still √n work just to reach this point.`,
         codeLine: 1,
+        vars: mkVars(step, i, null, probes, leapChanged),
       })
       return steps
     }
@@ -253,6 +307,7 @@ function jumpSteps(): Step<JumpState>[] {
         state: { phase: 'leap', i, blockStart: null, blockEnd: null, scanIdx: null, leaps, probes, found: false, foundAt: null },
         description: `Leap ${leaps}: probe a[${i}] = ${ARR[i]} > ${TARGET} — overshot by ${ARR[i] - TARGET}! The fixed stride cannot exploit what it just learned: ${TARGET} must be hiding in the block just behind this probe.`,
         codeLine: 1,
+        vars: mkVars(step, i, null, probes, leapChanged),
       })
       break
     }
@@ -261,6 +316,7 @@ function jumpSteps(): Step<JumpState>[] {
       state: { phase: 'leap', i, blockStart: null, blockEnd: null, scanIdx: null, leaps, probes, found: false, foundAt: null },
       description: `Leap ${leaps}: probe a[${i}] = ${ARR[i]} < ${TARGET} — still below, stride forward another ${step} positions.`,
       codeLine: 1,
+      vars: mkVars(step, i, null, probes, leapChanged),
     })
     i += step
   }
@@ -274,6 +330,7 @@ function jumpSteps(): Step<JumpState>[] {
       state: { phase: 'leap', i: n - 1, blockStart: null, blockEnd: null, scanIdx: null, leaps, probes, found: false, foundAt: null },
       description: `Leap ${leaps}: i = ${i} ≥ n — walked off the end. ${TARGET} must be in the final block. Back up to scan.`,
       codeLine: 1,
+      vars: mkVars(step, i, null, probes, ['i', 'a[i]', 'probes']),
     })
   }
 
@@ -285,24 +342,30 @@ function jumpSteps(): Step<JumpState>[] {
     state: { phase: 'scan', i: blockEnd, blockStart, blockEnd, scanIdx: blockStart, leaps, probes, found: false, foundAt: null },
     description: `Now linearly scan block a[${blockStart}..${blockEnd}] (${blockEnd - blockStart + 1} element${blockEnd - blockStart + 1 === 1 ? '' : 's'}). This is the blind spot: the stride skipped right over the answer zone.`,
     codeLine: 3,
+    vars: mkVars(step, i, blockStart, probes, ['k', 'a[k]']),
   })
 
   let foundAt: number | null = null
+  let firstScan = true
   for (let k = blockStart; k <= blockEnd; k++) {
     probes++
+    const scanChanged = firstScan ? ['probes'] : ['k', 'a[k]', 'probes']
+    firstScan = false
     if (ARR[k] === TARGET) {
       foundAt = k
       steps.push({
         state: { phase: 'done', i: blockEnd, blockStart, blockEnd, scanIdx: k, leaps, probes, found: true, foundAt },
         description: `Scan: a[${k}] = ${ARR[k]} — found ${TARGET}! Total probes: ${probes} (${leaps} leaps + ${probes - leaps} scan check${probes - leaps === 1 ? '' : 's'}). Binary search finds the same answer in just ${bsProbes} probes — at a million elements, jump search still needs ~2,000 where ~20 would do.`,
         codeLine: 4,
+        vars: mkVars(step, i, k, probes, scanChanged),
       })
       return steps
     }
     steps.push({
       state: { phase: 'scan', i: blockEnd, blockStart, blockEnd, scanIdx: k, leaps, probes, found: false, foundAt: null },
-      description: `Scan: a[${k}] = ${ARR[k]} ≠ ${TARGET}. Next.`,
+      description: `Scan: a[${k}] = ${ARR[k]} ${ARR[k] < TARGET ? '<' : '>'} ${TARGET} — no match. Inside the block we are back to one-cell-at-a-time elimination, so step the cursor to a[${k + 1}].`,
       codeLine: 3,
+      vars: mkVars(step, i, k, probes, scanChanged),
     })
   }
 
@@ -311,6 +374,7 @@ function jumpSteps(): Step<JumpState>[] {
     state: { phase: 'done', i: blockEnd, blockStart, blockEnd, scanIdx: blockEnd, leaps, probes, found: false, foundAt: null },
     description: `Block exhausted, ${TARGET} not found. ${probes} probes total. Jump search trades binary search's perfect halving for a fixed stride that learns only the minimum from each comparison.`,
     codeLine: 4,
+    vars: mkVars(step, i, blockEnd, probes),
   })
   return steps
 }

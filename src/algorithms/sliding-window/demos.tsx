@@ -1,4 +1,4 @@
-import type { AttemptDemo, Step } from '../../core/types'
+import type { AttemptDemo, Step, VarEntry } from '../../core/types'
 import { Cells, Legend, VizCaption } from '../../components/vizPrimitives'
 import { S, CHARS } from './data'
 
@@ -30,66 +30,90 @@ interface NaiveState {
   done: boolean
 }
 
+function naiveVars(o: {
+  i: number
+  j: number
+  sub: string
+  best: number
+  checked: number
+  changed?: Partial<Record<'i' | 'j' | 'sub' | 'best' | 'checked', boolean>>
+}): VarEntry[] {
+  const ch = o.changed ?? {}
+  return [
+    { name: 'i', value: o.i < 0 ? '—' : String(o.i), changed: ch.i },
+    { name: 'j', value: o.j < 0 ? '—' : String(o.j), changed: ch.j },
+    { name: 's[i..j]', value: o.sub ? `"${o.sub}"` : '—', changed: ch.sub },
+    { name: 'best', value: String(o.best), changed: ch.best },
+    { name: 'checked', value: String(o.checked), changed: ch.checked },
+  ]
+}
+
+/** First letter that occurs twice in s[i..j], with both indices — or null if clean. */
+function firstDuplicate(i: number, j: number): { ch: string; first: number; second: number } | null {
+  const firstPos = new Map<string, number>()
+  for (let k = i; k <= j; k++) {
+    const c = CHARS[k]
+    if (firstPos.has(c)) return { ch: c, first: firstPos.get(c)!, second: k }
+    firstPos.set(c, k)
+  }
+  return null
+}
+
 function naiveSteps(): Step<NaiveState>[] {
   const steps: Step<NaiveState>[] = []
   const n = CHARS.length // 9
   const totalSubs = (n * (n + 1)) / 2 // 45
 
-  // Sentinel intro
   steps.push({
     state: { i: -1, j: -1, sub: '', clean: false, best: 0, checked: 0, done: false },
-    description: `Brute force: test every substring of "${S}" for repeated characters. With n = ${n} there are ${totalSubs} substrings — start at the top-left corner and grind right and down.`,
+    description: `Brute force: test every substring of "${S}" for repeated characters. With n = ${n} there are ${totalSubs} substrings — start at the top-left corner and grind right and down, checking every single one.`,
     codeLine: 0,
+    vars: naiveVars({ i: -1, j: -1, sub: '', best: 0, checked: 0, changed: { best: true, checked: true } }),
   })
 
   let best = 0
   let checked = 0
-  const SHOW_LIMIT = 9 // emit real steps for the first 9 checks, then truncate
 
-  outer: for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i++) {
     for (let j = i; j < n; j++) {
       checked++
       const sub = S.slice(i, j + 1)
-      const seen = new Set(sub)
-      const clean = seen.size === sub.length
-      if (clean && sub.length > best) best = sub.length
+      const dup = firstDuplicate(i, j)
+      const clean = dup === null
+      const improved = clean && sub.length > best
+      if (improved) best = sub.length
 
-      if (checked <= SHOW_LIMIT) {
-        steps.push({
-          state: { i, j, sub, clean, best, checked, done: false },
-          description: clean
-            ? `Check ${checked}: s[${i}..${j}] = "${sub}" — no repeats, length ${sub.length}. best = ${best}.`
-            : `Check ${checked}: s[${i}..${j}] = "${sub}" — duplicate found. Discard. (Everything we just verified about the first ${sub.length - 1} characters is thrown away too.)`,
-          codeLine: clean ? 4 : 3,
-        })
+      const newStart = j === i && i > 0
+      const prefix = newStart
+        ? `New start i = ${i} — everything verified for start ${i - 1} is forgotten and the scan begins again. `
+        : ''
+
+      let body: string
+      if (improved) {
+        body = `Check ${checked}: s[${i}..${j}] = "${sub}" — all ${sub.length} characters are distinct, and length ${sub.length} beats the old record: best = ${best}.`
+      } else if (clean) {
+        body = `Check ${checked}: s[${i}..${j}] = "${sub}" — no repeats, length ${sub.length}, but best is already ${best}, so nothing changes.`
+      } else {
+        body = `Check ${checked}: s[${i}..${j}] = "${sub}" — '${dup!.ch}' appears at both index ${dup!.first} and index ${dup!.second}, so it is rejected. best stays ${best}.`
       }
 
-      if (checked === SHOW_LIMIT) break outer
+      steps.push({
+        state: { i, j, sub, clean, best, checked, done: false },
+        description: prefix + body,
+        codeLine: improved ? 4 : 3,
+        vars: naiveVars({
+          i, j, sub, best, checked,
+          changed: { i: j === i, j: true, sub: true, best: improved, checked: true },
+        }),
+      })
     }
   }
 
-  // Finish the actual computation silently so we can report the true final answer
-  let realBest = best
-  for (let i = 0; i < n; i++) {
-    for (let j = i; j < n; j++) {
-      const sub = S.slice(i, j + 1)
-      const seen = new Set(sub)
-      if (seen.size === sub.length && sub.length > realBest) realBest = sub.length
-    }
-  }
-
-  // Truncation step
   steps.push({
-    state: { i: 8, j: 8, sub: S[8], clean: true, best: realBest, checked: totalSubs, done: false },
-    description: `…and so on — ${totalSubs} substrings checked in total. Every fresh start at index i throws away everything verified for index i − 1.`,
-    codeLine: 2,
-  })
-
-  // Final verdict
-  steps.push({
-    state: { i: -1, j: -1, sub: '', clean: false, best: realBest, checked: totalSubs, done: true },
-    description: `Done. Longest duplicate-free substring: length ${realBest}. Cost: ${totalSubs} substring checks touching ~165 characters — for a 9-letter string.`,
+    state: { i: -1, j: -1, sub: '', clean: false, best, checked, done: true },
+    description: `Done. All ${totalSubs} substrings were actually checked, touching ~165 characters in total, and the longest duplicate-free one has length ${best} ("cbad", indices 2–5) — every fresh start at index i threw away everything already verified for index i − 1.`,
     codeLine: 5,
+    vars: naiveVars({ i: -1, j: -1, sub: '', best, checked }),
   })
 
   return steps
@@ -164,6 +188,26 @@ interface GapState {
   predicted: number
 }
 
+function gapVars(o: {
+  pos: string
+  letter: string
+  p: number
+  q: number
+  gap: number
+  best: number
+  changed?: Partial<Record<'pos' | 'letter' | 'p' | 'q' | 'gap' | 'best', boolean>>
+}): VarEntry[] {
+  const ch = o.changed ?? {}
+  return [
+    { name: 'pos', value: o.pos || '—', changed: ch.pos },
+    { name: 'letter', value: o.letter ? `'${o.letter}'` : '—', changed: ch.letter },
+    { name: 'p', value: o.p < 0 ? '—' : String(o.p), changed: ch.p },
+    { name: 'q', value: o.q < 0 ? '—' : String(o.q), changed: ch.q },
+    { name: 'gap', value: o.gap < 0 ? '—' : String(o.gap), changed: ch.gap },
+    { name: 'best', value: String(o.best), changed: ch.best },
+  ]
+}
+
 function gapSteps(): Step<GapState>[] {
   const steps: Step<GapState>[] = []
 
@@ -183,12 +227,14 @@ function gapSteps(): Step<GapState>[] {
   repeated.sort((x, y) => x[0].localeCompare(y[0]))
 
   const posSnapshot: [string, number[]][] = [...posMap.entries()].sort((x, y) => x[0].localeCompare(y[0]))
+  const posStr = `{${posSnapshot.map(([ch, pos]) => `${ch}:[${pos.join(',')}]`).join(', ')}}`
 
   // Step 1: sentinel — describe the idea
   steps.push({
     state: { positions: [], letter: '', p: -1, q: -1, gap: 0, best: 0, done: false, predicted: 0 },
     description: `Idea: only a repeated letter can ruin a stretch, so skip testing substrings entirely. Record where each letter appears, then the longest clean run is just the biggest gap between two occurrences of the same letter.`,
     codeLine: 1,
+    vars: gapVars({ pos: '', letter: '', p: -1, q: -1, gap: -1, best: 0, changed: { best: true } }),
   })
 
   // Step 2: show the completed position map
@@ -196,6 +242,7 @@ function gapSteps(): Step<GapState>[] {
     state: { positions: posSnapshot, letter: '', p: -1, q: -1, gap: 0, best: 0, done: false, predicted: 0 },
     description: `Scan "${S}" once: 'a' → [0,4,7]; 'b' → [1,3,8]; 'c' → [2,6]; 'd' → [5]. Letters with only one occurrence ('d') can never break a stretch — ignore them. Now measure the gaps for a, b, c.`,
     codeLine: 0,
+    vars: gapVars({ pos: posStr, letter: '', p: -1, q: -1, gap: -1, best: 0, changed: { pos: true } }),
   })
 
   let best = 0
@@ -205,8 +252,9 @@ function gapSteps(): Step<GapState>[] {
     // Intro step for this letter
     steps.push({
       state: { positions: posSnapshot, letter: ch, p: pos[0], q: pos[1], gap: 0, best, done: false, predicted: 0 },
-      description: `'${ch}' occurs at [${pos.join(', ')}] — ${pos.length - 1} consecutive pair${pos.length - 1 === 1 ? '' : 's'} to check.`,
+      description: `'${ch}' occurs at [${pos.join(', ')}] — ${pos.length - 1} consecutive pair${pos.length - 1 === 1 ? '' : 's'} to check. Point p at index ${pos[0]} and q at index ${pos[1]}.`,
       codeLine: 2,
+      vars: gapVars({ pos: posStr, letter: ch, p: pos[0], q: pos[1], gap: -1, best, changed: { letter: true, p: true, q: true, gap: true } }),
     })
 
     for (let k = 0; k + 1 < pos.length; k++) {
@@ -222,6 +270,7 @@ function gapSteps(): Step<GapState>[] {
           ? `'${ch}': indices ${p} and ${q}, gap = ${q} − ${p} = ${gap}. Stretch "${S.slice(p, q)}" (indices ${p}–${q - 1}) holds '${ch}' only once. New best = ${best}.`
           : `'${ch}': indices ${p} and ${q}, gap = ${q} − ${p} = ${gap}. Doesn't beat best = ${best}.`,
         codeLine: improved ? 4 : 3,
+        vars: gapVars({ pos: posStr, letter: ch, p, q, gap, best, changed: { p: k > 0, q: k > 0, gap: true, best: improved } }),
       })
     }
   }
@@ -233,6 +282,7 @@ function gapSteps(): Step<GapState>[] {
     state: { positions: posSnapshot, letter: 'b', p: 3, q: 8, gap: 5, best, done: true, predicted: best },
     description: `Algorithm returns ${best}. But the winning stretch "badca" (indices 3–7) contains 'a' at BOTH index 4 and index 7 — passing b's gap test while failing a's. The gap idea certifies one letter; it says nothing about every other letter inside the stretch. Predicted: ${best}. Real answer: 4.`,
     codeLine: 5,
+    vars: gapVars({ pos: posStr, letter: 'b', p: 3, q: 8, gap: 5, best }),
   })
 
   return steps
@@ -320,133 +370,107 @@ interface SetState {
   done: boolean
 }
 
+function setVars(o: {
+  i: number
+  j: number
+  seen: string[]
+  best: number
+  examined: number
+  changed?: Partial<Record<'i' | 'j' | 'seen' | 'best' | 'examined', boolean>>
+}): VarEntry[] {
+  const ch = o.changed ?? {}
+  return [
+    { name: 'i', value: o.i < 0 ? '—' : String(o.i), changed: ch.i },
+    { name: 'j', value: o.j < 0 ? '—' : String(o.j), changed: ch.j },
+    { name: 's[j]', value: o.j < 0 ? '—' : `'${CHARS[o.j]}'`, changed: ch.j },
+    { name: 'seen', value: `{${o.seen.join(', ')}}`, changed: ch.seen },
+    { name: 'best', value: String(o.best), changed: ch.best },
+    { name: 'examined', value: String(o.examined), changed: ch.examined },
+  ]
+}
+
 function setSteps(): Step<SetState>[] {
   const steps: Step<SetState>[] = []
   const n = CHARS.length // 9
-
-  // Compute honest stats up front (not emitted as steps — used in descriptions)
-  let totalExamined = 0
-  let trueBest = 0
-  const perStart: number[] = []
-  for (let i = 0; i < n; i++) {
-    const s2 = new Set<string>()
-    let count = 0
-    for (let j = i; j < n; j++) {
-      count++
-      if (s2.has(CHARS[j])) { break }
-      s2.add(CHARS[j])
-    }
-    perStart.push(count)
-    totalExamined += count
-    if (s2.size > trueBest) trueBest = s2.size
-  }
 
   // Step 1: Sentinel intro
   steps.push({
     state: { i: -1, j: -1, seen: [], clash: null, best: 0, examined: 0, done: false },
     description: `Hash-set approach: from each start i, walk right adding characters to a set; stop at the first repeat. Correct — but the set is cleared and rebuilt ${n} times, rediscovering facts already proven.`,
     codeLine: 0,
+    vars: setVars({ i: -1, j: -1, seen: [], best: 0, examined: 0, changed: { best: true, examined: true } }),
   })
 
   let best = 0
   let examined = 0
+  let prevLen = 0
+  const perStart: number[] = []
 
-  // Show i=0 in full: walk 'a','b','c' then hit 'b' clash → 4 chars examined, len 3
-  const i0 = 0
-  {
-    const seen0 = new Set<string>()
+  for (let i = 0; i < n; i++) {
+    const seen = new Set<string>()
+
+    // Start step — name the waste when the previous run already certified this region
+    const overlapEnd = i - 1 + prevLen - 1 // last index certified by the previous start
+    const overlap = i > 0 && overlapEnd >= i ? S.slice(i, overlapEnd + 1) : ''
     steps.push({
-      state: { i: i0, j: -1, seen: [], clash: null, best, examined, done: false },
-      description: `Start i=0: clear the set, scan right from '${CHARS[i0]}'.`,
+      state: { i, j: -1, seen: [], clash: null, best, examined, done: false },
+      description:
+        i === 0
+          ? `Start i=0: the set is empty — scan right from '${CHARS[0]}'.`
+          : overlap
+            ? `Start i=${i}: the set is cleared and the scan restarts from '${CHARS[i]}' — even though "${overlap}" (indices ${i}–${overlapEnd}) was certified duplicate-free a moment ago during start ${i - 1}. Every one of those characters will now be re-proven.`
+            : `Start i=${i}: clear the set and scan right from '${CHARS[i]}'.`,
       codeLine: 2,
+      vars: setVars({ i, j: -1, seen: [], best, examined, changed: { i: true, j: true, seen: true } }),
     })
-    let j = i0
+
+    let j = i
+    let clashChar: string | null = null
     for (; j < n; j++) {
       const c = CHARS[j]
       examined++
-      if (seen0.has(c)) {
-        steps.push({ state: { i: i0, j, seen: [...seen0], clash: c, best, examined, done: false }, description: `j=${j}: '${c}' already in {${[...seen0].join(', ')}} — stop. Run "abc", length 3.`, codeLine: 4 })
+      if (seen.has(c)) {
+        clashChar = c
+        const firstIdx = S.indexOf(c, i)
+        steps.push({
+          state: { i, j, seen: [...seen], clash: c, best, examined, done: false },
+          description: `j=${j}: '${c}' is already in {${[...seen].join(', ')}} — it entered back at index ${firstIdx} — so the run dies here. "${S.slice(i, j)}" from start ${i} has length ${j - i}.`,
+          codeLine: 4,
+          vars: setVars({ i, j, seen: [...seen], best, examined, changed: { j: true, examined: true } }),
+        })
         break
       }
-      seen0.add(c)
-      steps.push({ state: { i: i0, j, seen: [...seen0], clash: null, best, examined, done: false }, description: `j=${j}: add '${c}' → {${[...seen0].join(', ')}}.`, codeLine: 5 })
+      seen.add(c)
+      steps.push({
+        state: { i, j, seen: [...seen], clash: null, best, examined, done: false },
+        description: `j=${j}: '${c}' is not in the set — admit it. seen = {${[...seen].join(', ')}}, run so far "${S.slice(i, j + 1)}".`,
+        codeLine: 5,
+        vars: setVars({ i, j, seen: [...seen], best, examined, changed: { j: true, seen: true, examined: true } }),
+      })
     }
-    if (seen0.size > best) best = seen0.size
-    steps.push({ state: { i: i0, j: Math.min(j, n - 1), seen: [...seen0], clash: j < n ? CHARS[j] : null, best, examined, done: false }, description: `End start 0: length ${seen0.size}, best = ${best}.`, codeLine: 6 })
-  }
-  // i=0 contributed: 4 chars, 4 steps in inner loop + 2 = 6 steps total
+    perStart.push(Math.min(j, n - 1) - i + 1)
 
-  // Show i=2 in full: 'c','b','a','d' admitted, 'c' clash → len 4, new best
-  const i2 = 2
-  {
-    // Update examined for i=1 silently
-    const seen1 = new Set<string>()
-    for (let j = 1; j < n; j++) {
-      examined++
-      if (seen1.has(CHARS[j])) break
-      seen1.add(CHARS[j])
-    }
-    if (seen1.size > best) best = seen1.size
-
-    const seen2 = new Set<string>()
+    const len = seen.size
+    const improved = len > best
+    if (improved) best = len
     steps.push({
-      state: { i: i2, j: -1, seen: [], clash: null, best, examined, done: false },
-      description: `Start i=2: set cleared — even though start 1's run "bc" is still fresh in memory. Scan from '${CHARS[i2]}'.`,
-      codeLine: 2,
+      state: { i, j: Math.min(j, n - 1), seen: [...seen], clash: clashChar, best, examined, done: false },
+      description: improved
+        ? `End start ${i}: run "${S.slice(i, i + len)}"${clashChar === null ? ' reached the end of the string with no repeat' : ''} — length ${len}. New best = ${best}!`
+        : `End start ${i}: run "${S.slice(i, i + len)}"${clashChar === null ? ' reached the end of the string' : ''}, length ${len} — doesn't beat best = ${best}.`,
+      codeLine: 6,
+      vars: setVars({ i, j: Math.min(j, n - 1), seen: [...seen], best, examined, changed: { best: improved } }),
     })
-    let j = i2
-    for (; j < n; j++) {
-      const c = CHARS[j]
-      examined++
-      if (seen2.has(c)) {
-        steps.push({ state: { i: i2, j, seen: [...seen2], clash: c, best, examined, done: false }, description: `j=${j}: '${c}' already in {${[...seen2].join(', ')}} — stop. Run "cbad", length 4.`, codeLine: 4 })
-        break
-      }
-      seen2.add(c)
-      steps.push({ state: { i: i2, j, seen: [...seen2], clash: null, best, examined, done: false }, description: `j=${j}: add '${c}' → {${[...seen2].join(', ')}}.`, codeLine: 5 })
-    }
-    if (seen2.size > best) best = seen2.size
-    steps.push({ state: { i: i2, j: Math.min(j, n - 1), seen: [...seen2], clash: j < n ? CHARS[j] : null, best, examined, done: false }, description: `End start 2: "cbad", length ${seen2.size}. New best = ${best}!`, codeLine: 6 })
+
+    prevLen = len
   }
 
-  // Show i=3 start — highlight the redundant rebuild
-  const i3 = 3
-  {
-    const seen3 = new Set<string>()
-    steps.push({
-      state: { i: i3, j: -1, seen: [], clash: null, best, examined, done: false },
-      description: `Start i=3: set cleared again. "bad" (indices 3–5) was certified duplicate-free just a moment ago from start 2 — yet b, a, d will all be re-proven from scratch.`,
-      codeLine: 2,
-    })
-    let j = i3
-    for (; j < n; j++) {
-      examined++
-      if (seen3.has(CHARS[j])) {
-        steps.push({ state: { i: i3, j, seen: [...seen3], clash: CHARS[j], best, examined, done: false }, description: `j=${j}: '${CHARS[j]}' already in {${[...seen3].join(', ')}} — stop. Length ${seen3.size}.`, codeLine: 4 })
-        break
-      }
-      seen3.add(CHARS[j])
-      steps.push({ state: { i: i3, j, seen: [...seen3], clash: null, best, examined, done: false }, description: `j=${j}: re-prove '${CHARS[j]}' → {${[...seen3].join(', ')}}.`, codeLine: 5 })
-    }
-    if (seen3.size > best) best = seen3.size
-  }
-
-  // Silently finish remaining starts
-  for (let i = 4; i < n; i++) {
-    const s = new Set<string>()
-    for (let j = i; j < n; j++) {
-      examined++
-      if (s.has(CHARS[j])) break
-      s.add(CHARS[j])
-    }
-    if (s.size > best) best = s.size
-  }
-
-  // Final verdict
+  // Final verdict — after every start was actually played out
   steps.push({
-    state: { i: -1, j: -1, seen: [], clash: null, best: trueBest, examined: totalExamined, done: true },
-    description: `Answer: ${trueBest} ("cbad", indices 2–5). Correct — but ${perStart.join(' + ')} = ${totalExamined} character examinations, the set rebuilt ${n} times. The window approach needs ~18 pointer moves to cover the same ground.`,
+    state: { i: -1, j: -1, seen: [], clash: null, best, examined, done: true },
+    description: `Answer: ${best} ("cbad", indices 2–5). Correct — but ${perStart.join(' + ')} = ${examined} character examinations and ${n} set rebuilds, where the sliding window needs ~18 pointer moves. The fix: when a repeat kills a run, keep the still-clean contents and evict from the LEFT instead of restarting.`,
     codeLine: 6,
+    vars: setVars({ i: -1, j: -1, seen: [], best, examined }),
   })
 
   return steps

@@ -1,4 +1,4 @@
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
 import { naiveDemo, gapDemo, setDemo } from './demos'
 import { S, CHARS } from './data'
 
@@ -25,6 +25,25 @@ function snapshot(partial: Omit<SWState, 'chars'>): SWState {
   return { chars: [...CHARS], ...partial }
 }
 
+/** Live variables, named exactly as in the pseudocode, in stable order. */
+function swVars(o: {
+  right: number
+  left: number
+  /** Characters currently inside the window, in window order. */
+  window: string[]
+  best: number
+  changed?: Partial<Record<'right' | 'left' | 'seen' | 'best', boolean>>
+}): VarEntry[] {
+  const ch = o.changed ?? {}
+  return [
+    { name: 'right', value: o.right < 0 ? '—' : String(o.right), changed: ch.right },
+    { name: 's[right]', value: o.right < 0 ? '—' : `'${CHARS[o.right]}'`, changed: ch.right },
+    { name: 'left', value: String(o.left), changed: ch.left },
+    { name: 'seen', value: `{${o.window.join(', ')}}`, changed: ch.seen },
+    { name: 'best', value: String(o.best), changed: ch.best },
+  ]
+}
+
 function generateSteps(): Step<SWState>[] {
   const steps: Step<SWState>[] = []
   const seen = new Set<string>()
@@ -37,12 +56,14 @@ function generateSteps(): Step<SWState>[] {
     state: snapshot({ left, right: -1, inWindow: false, dupIndex: null, best, bestL, bestR, done: false }),
     description: `Find the longest run of unique characters in "${S}". The window starts empty: L waits at index 0, R is about to scan, best = 0. Invariant: the window NEVER contains a repeat.`,
     codeLine: 0,
+    vars: swVars({ right: -1, left, window: [], best, changed: { left: true, seen: true, best: true } }),
   })
 
   for (let right = 0; right < CHARS.length; right++) {
     const c = CHARS[right]
+    const hadDup = seen.has(c)
 
-    if (seen.has(c)) {
+    if (hadDup) {
       let dupIndex = -1
       for (let i = left; i < right; i++) if (CHARS[i] === c) dupIndex = i
 
@@ -50,6 +71,7 @@ function generateSteps(): Step<SWState>[] {
         state: snapshot({ left, right, inWindow: false, dupIndex, best, bestL, bestR, done: false }),
         description: `R reaches '${c}' at index ${right} — but '${c}' already sits inside the window at index ${dupIndex}. Admitting it would break the no-repeat invariant, so the window must shrink from the left first.`,
         codeLine: 2,
+        vars: swVars({ right, left, window: CHARS.slice(left, right), best, changed: { right: true } }),
       })
 
       while (seen.has(c)) {
@@ -63,6 +85,7 @@ function generateSteps(): Step<SWState>[] {
             ? `Evict '${evicted}' — that was the duplicate itself. L slides to index ${left} and the clash is gone. Note we never re-examined anything: L only ever moves forward.`
             : `Evict '${evicted}' from the left; L slides to index ${left}. The old '${c}' is still inside, so the clash isn't fixed yet — keep shrinking.`,
           codeLine: 3,
+          vars: swVars({ right, left, window: CHARS.slice(left, right), best, changed: { left: true, seen: true } }),
         })
       }
     }
@@ -82,6 +105,7 @@ function generateSteps(): Step<SWState>[] {
         ? `'${c}' enters safely — the window "${winStr}" (indices ${left}–${right}) is duplicate-free. Length ${len} beats the old record: best = ${best}.`
         : `'${c}' enters safely. Window "${winStr}" (indices ${left}–${right}) has length ${len}, which doesn't beat best = ${best} — but only a duplicate-free window can ever grow, so the shrinking was still worth it.`,
       codeLine: improved ? 5 : 4,
+      vars: swVars({ right, left, window: CHARS.slice(left, right + 1), best, changed: { right: !hadDup, seen: true, best: improved } }),
     })
   }
 
@@ -89,6 +113,7 @@ function generateSteps(): Step<SWState>[] {
     state: snapshot({ left, right: CHARS.length - 1, inWindow: true, dupIndex: null, best, bestL, bestR, done: true }),
     description: `Scan complete. The longest duplicate-free substring is "${S.slice(bestL, bestR + 1)}" (indices ${bestL}–${bestR}), length ${best}. L and R each moved forward at most ${S.length} times — about ${2 * S.length} pointer moves total, instead of testing all ${(S.length * (S.length + 1)) / 2} substrings.`,
     codeLine: 6,
+    vars: swVars({ right: CHARS.length - 1, left, window: CHARS.slice(left, CHARS.length), best }),
   })
 
   return steps

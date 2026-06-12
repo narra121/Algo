@@ -1,4 +1,4 @@
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
 import { naiveDemo, mergeDemo, newListsDemo } from './demos'
 import { ARR as _ARR } from './data'
 
@@ -27,19 +27,44 @@ function generateSteps(): Step<QSState>[] {
   const steps: Step<QSState>[] = []
   const a = [...ARR]
   const done = ARR.map(() => false)
+  let comparisons = 0
+  let swaps = 0
+
+  /** Display values for the variables panel (already formatted, '—' = not live). */
+  interface Vals { lo: string; hi: string; pivot: string; i: string; j: string }
 
   const push = (
     description: string,
     codeLine: number,
     s: Pick<QSState, 'lo' | 'hi' | 'pivotIdx' | 'i' | 'j' | 'swapped'>,
+    v: Vals,
+    changed: string[],
   ) => {
-    steps.push({ state: { arr: [...a], done: [...done], ...s }, description, codeLine })
+    const entry = (name: string, value: string): VarEntry =>
+      changed.includes(name) ? { name, value, changed: true } : { name, value }
+    steps.push({
+      state: { arr: [...a], done: [...done], ...s },
+      description,
+      codeLine,
+      vars: [
+        entry('a', `[${a.join(', ')}]`),
+        entry('lo', v.lo),
+        entry('hi', v.hi),
+        entry('pivot', v.pivot),
+        entry('i', v.i),
+        entry('j', v.j),
+        entry('comparisons', String(comparisons)),
+        entry('swaps', String(swaps)),
+      ],
+    })
   }
 
   push(
     `Goal: sort [${ARR.join(', ')}] into ascending order — [8, 10, 13, 14, 25, 29, 31, 37] — in place. The plan: pick a pivot, sweep everything smaller to its left and everything bigger to its right — the pivot drops into its final sorted slot, then we repeat on each half.`,
     0,
     { lo: 0, hi: ARR.length - 1, pivotIdx: -1, i: -1, j: -1, swapped: null },
+    { lo: '0', hi: String(ARR.length - 1), pivot: '—', i: '—', j: '—' },
+    ['a', 'lo', 'hi'],
   )
 
   const sort = (lo: number, hi: number, intro: string): void => {
@@ -50,6 +75,8 @@ function generateSteps(): Step<QSState>[] {
         `${intro}a[${lo}] = ${a[lo]} is a one-element range — a single element is sorted by definition. Mark it done.`,
         1,
         { lo, hi, pivotIdx: -1, i: -1, j: -1, swapped: null },
+        { lo: String(lo), hi: String(hi), pivot: '—', i: '—', j: '—' },
+        ['lo', 'hi'],
       )
       return
     }
@@ -57,12 +84,15 @@ function generateSteps(): Step<QSState>[] {
     const pivot = a[hi]
     let i = lo
     push(
-      `${intro}Partition a[${lo}..${hi}]. Pivot = ${pivot}, the last element. Boundary i starts at ${lo} — everything left of i will be the "smaller than ${pivot}" zone. Scanner j walks the range hunting for small elements to pull across.`,
+      `${intro}Partition a[${lo}..${hi}] = [${a.slice(lo, hi + 1).join(', ')}]. Pivot = ${pivot}, the last element. Boundary i starts at ${lo} — everything left of i will be the "smaller than ${pivot}" zone. Scanner j walks the range hunting for small elements to pull across.`,
       2,
       { lo, hi, pivotIdx: hi, i, j: -1, swapped: null },
+      { lo: String(lo), hi: String(hi), pivot: String(pivot), i: String(i), j: '—' },
+      ['lo', 'hi', 'pivot', 'i'],
     )
 
     for (let j = lo; j < hi; j++) {
+      comparisons++
       if (a[j] < pivot) {
         if (i === j) {
           i++
@@ -70,6 +100,8 @@ function generateSteps(): Step<QSState>[] {
             `a[${j}] = ${a[j]} < ${pivot} — it belongs in the small zone, and it is already sitting at the boundary slot. No swap needed; the zone simply grows to absorb it (i → ${i}).`,
             5,
             { lo, hi, pivotIdx: hi, i, j, swapped: null },
+            { lo: String(lo), hi: String(hi), pivot: String(pivot), i: String(i), j: String(j) },
+            ['i', 'j', 'comparisons'],
           )
         } else {
           const small = a[j]
@@ -77,10 +109,13 @@ function generateSteps(): Step<QSState>[] {
           ;[a[i], a[j]] = [a[j], a[i]]
           const oldI = i
           i++
+          swaps++
           push(
             `a[${j}] = ${small} < ${pivot} — but the boundary slot holds big ${big}. Swap them: ${small} joins the small zone, ${big} gets bumped deeper into big territory (i → ${i}).`,
             5,
             { lo, hi, pivotIdx: hi, i, j, swapped: [oldI, j] },
+            { lo: String(lo), hi: String(hi), pivot: String(pivot), i: String(i), j: String(j) },
+            ['a', 'i', 'j', 'comparisons', 'swaps'],
           )
         }
       } else {
@@ -88,6 +123,8 @@ function generateSteps(): Step<QSState>[] {
           `a[${j}] = ${a[j]} ≥ ${pivot} — too big for the small zone. Leave it where it is: i holds its ground at ${i} while j moves on.`,
           4,
           { lo, hi, pivotIdx: hi, i, j, swapped: null },
+          { lo: String(lo), hi: String(hi), pivot: String(pivot), i: String(i), j: String(j) },
+          ['j', 'comparisons'],
         )
       }
     }
@@ -98,15 +135,20 @@ function generateSteps(): Step<QSState>[] {
         `The boundary i walked all the way to the pivot itself — every element scanned was smaller than ${pivot}. So ${pivot} is already in its final home at index ${i}; no swap needed. It never moves again.`,
         6,
         { lo, hi, pivotIdx: -1, i: -1, j: -1, swapped: null },
+        { lo: String(lo), hi: String(hi), pivot: String(pivot), i: String(i), j: '—' },
+        [],
       )
     } else {
       const displaced = a[i]
       ;[a[i], a[hi]] = [a[hi], a[i]]
       done[i] = true
+      swaps++
       push(
         `Scan done: a[${lo}..${i - 1}] are all < ${pivot}. Swap pivot ${pivot} with ${displaced} at the boundary — ${pivot} lands at index ${i}, its FINAL home: everything left is smaller, everything right is bigger.`,
         6,
         { lo, hi, pivotIdx: -1, i: -1, j: -1, swapped: [i, hi] },
+        { lo: String(lo), hi: String(hi), pivot: String(pivot), i: String(i), j: '—' },
+        ['a', 'swaps'],
       )
     }
 
@@ -117,9 +159,11 @@ function generateSteps(): Step<QSState>[] {
   sort(0, ARR.length - 1, '')
 
   push(
-    `Every pivot dropped into its slot and the one-element ranges filled the gaps: [${a.join(', ')}]. Fully sorted in 21 comparisons across 5 partition passes — selection sort would have ground through all 28 on these same 8 numbers, and at a million items that gap explodes to ~20 million vs ~500 billion. No merge step needed: the partitioning alone did all the work.`,
+    `Every pivot dropped into its slot and the one-element ranges filled the gaps: [${a.join(', ')}]. Fully sorted in ${comparisons} comparisons and ${swaps} swaps across 5 partition passes — selection sort would have ground through all 28 comparisons on these same 8 numbers, and at a million items that gap explodes to ~20 million vs ~500 billion. No merge step needed: the partitioning alone did all the work.`,
     -1,
     { lo: -1, hi: -1, pivotIdx: -1, i: -1, j: -1, swapped: null },
+    { lo: '—', hi: '—', pivot: '—', i: '—', j: '—' },
+    [],
   )
 
   return steps

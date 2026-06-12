@@ -1,5 +1,15 @@
 import type { ComponentType } from 'react'
 
+/** One live variable shown in the variables panel at a given step. */
+export interface VarEntry {
+  /** Variable name exactly as it appears in the pseudocode, e.g. "left". */
+  name: string
+  /** Current value, pre-formatted for display, e.g. "3", "[2, 5, 8]", "—". */
+  value: string
+  /** True when THIS step changed the variable — the panel highlights it. */
+  changed?: boolean
+}
+
 /** One immutable snapshot of an algorithm's execution. */
 export interface Step<S = unknown> {
   /** Full state snapshot rendered by the algorithm's Visualizer. */
@@ -8,6 +18,11 @@ export interface Step<S = unknown> {
   description: string
   /** Index into `pseudocode` to highlight, or -1 for none. */
   codeLine: number
+  /**
+   * Every live variable of the algorithm at this step, in stable order.
+   * Same names every step so the panel doesn't jump; mark changed ones.
+   */
+  vars?: VarEntry[]
 }
 
 /** An embedded, on-demand animation of ONE approach (brute force or journey attempt). */

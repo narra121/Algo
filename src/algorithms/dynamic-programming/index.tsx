@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
 import { naiveDemo, greedyDemo, recursionDemo, memoDemo } from './demos'
 import { VALUES } from './data'
 
@@ -23,10 +23,26 @@ function generateSteps(): Step<DPState>[] {
   const n = VALUES.length
   const dp: (number | null)[] = new Array(n).fill(null)
 
+  const fmtDp = (a: (number | null)[]) => `[${a.map(v => (v === null ? '—' : v)).join(', ')}]`
+  const mkVars = (
+    i: number | null,
+    robVal: string,
+    skipVal: string,
+    ch: { i?: boolean; dp?: boolean; rob?: boolean; skip?: boolean } = {},
+  ): VarEntry[] => [
+    { name: 'i', value: i === null ? '—' : String(i), ...(ch.i ? { changed: true } : {}) },
+    { name: 'dp[]', value: fmtDp(dp), ...(ch.dp ? { changed: true } : {}) },
+    { name: 'rob', value: robVal, ...(ch.rob ? { changed: true } : {}) },
+    { name: 'skip', value: skipVal, ...(ch.skip ? { changed: true } : {}) },
+  ]
+  let robStr = '—'
+  let skipStr = '—'
+
   steps.push({
     state: { values: [...VALUES], dp: [...dp], house: -1, compare: [], justWrote: -1, finished: false },
     description: `Goal: steal the MAXIMUM total from seven houses holding [${VALUES.join(', ')}], where robbing two neighbors trips the alarm. Brute force would weigh all 2^${VALUES.length} = ${2 ** VALUES.length} rob/skip subsets — instead we build a table where dp[i] = the best haul using only houses 0…i. Each entry gets computed exactly once.`,
     codeLine: 0,
+    vars: mkVars(null, robStr, skipStr, { dp: true }),
   })
 
   dp[0] = VALUES[0]
@@ -34,6 +50,7 @@ function generateSteps(): Step<DPState>[] {
     state: { values: [...VALUES], dp: [...dp], house: 0, compare: [], justWrote: 0, finished: false },
     description: `Base case: if house 0 is the whole street, the best haul is simply its ${VALUES[0]}. Write dp[0] = ${VALUES[0]} — this tiny answer is now settled forever.`,
     codeLine: 1,
+    vars: mkVars(null, robStr, skipStr, { dp: true }),
   })
 
   dp[1] = Math.max(VALUES[0], VALUES[1])
@@ -41,6 +58,7 @@ function generateSteps(): Step<DPState>[] {
     state: { values: [...VALUES], dp: [...dp], house: 1, compare: [0], justWrote: 1, finished: false },
     description: `Houses 0 and 1 are neighbors, so we can take at most one. max(${VALUES[0]}, ${VALUES[1]}) = ${dp[1]}. Write dp[1] = ${dp[1]}. The two seeds are planted; every later answer grows from entries like these.`,
     codeLine: 2,
+    vars: mkVars(null, robStr, skipStr, { dp: true }),
   })
 
   for (let i = 2; i < n; i++) {
@@ -51,12 +69,16 @@ function generateSteps(): Step<DPState>[] {
       state: { values: [...VALUES], dp: [...dp], house: i, compare: [], justWrote: -1, finished: false },
       description: `Move to house ${i}, holding ${VALUES[i]}. Only two futures exist: rob it (then house ${i - 1} is off-limits) or skip it. Both futures were already priced — they're sitting in the table.`,
       codeLine: 3,
+      vars: mkVars(i, robStr, skipStr, { i: true }),
     })
 
+    robStr = `${VALUES[i]} + ${dp[i - 2]} = ${rob}`
+    skipStr = `${skip}`
     steps.push({
       state: { values: [...VALUES], dp: [...dp], house: i, compare: [i - 2, i - 1], justWrote: -1, finished: false },
       description: `ROB: take the ${VALUES[i]} here plus dp[${i - 2}] = ${dp[i - 2]} (best haul that legally ends before the neighbor) → ${VALUES[i]} + ${dp[i - 2]} = ${rob}. SKIP: keep dp[${i - 1}] = ${skip} as-is. No recursion, no re-planning — just two table lookups.`,
       codeLine: 4,
+      vars: mkVars(i, robStr, skipStr, { rob: true, skip: true }),
     })
 
     dp[i] = Math.max(rob, skip)
@@ -67,6 +89,7 @@ function generateSteps(): Step<DPState>[] {
         ? `Robbing wins: ${rob} > ${skip}, so dp[${i}] = ${dp[i]}. Grabbing the ${VALUES[i]} here beats whatever skipping preserved — small answers just built a bigger one.`
         : `Skipping wins: ${skip} ≥ ${rob}, so dp[${i}] = ${dp[i]}. The ${VALUES[i]} in this house isn't worth giving up the streak already banked in dp[${i - 1}].`,
       codeLine: 6,
+      vars: mkVars(i, robStr, skipStr, { dp: true }),
     })
   }
 
@@ -74,6 +97,7 @@ function generateSteps(): Step<DPState>[] {
     state: { values: [...VALUES], dp: [...dp], house: -1, compare: [], justWrote: n - 1, finished: true },
     description: `The table is full. dp[${n - 1}] = ${dp[n - 1]} is the maximum haul for the whole street — found with just ${n} cheap table fills instead of exploring 2^${n} = ${2 ** n} rob/skip combinations.`,
     codeLine: 7,
+    vars: mkVars(n - 1, robStr, skipStr),
   })
 
   return steps

@@ -1,6 +1,15 @@
 import type { ReactElement } from 'react'
-import type { AttemptDemo, Step } from '../../core/types'
+import type { AttemptDemo, Step, VarEntry } from '../../core/types'
 import { N } from './data'
+
+/** Build a VarEntry list, marking `changed` on every entry whose value differs
+ *  from the previous step's value for the same name (i.e. this step modified it). */
+function diffVars(prev: VarEntry[] | null, raw: { name: string; value: string }[]): VarEntry[] {
+  return raw.map((v) => ({
+    ...v,
+    changed: prev !== null && prev.find((p) => p.name === v.name)?.value !== v.value,
+  }))
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Shared board renderer
@@ -127,7 +136,10 @@ function makeFullBoardCells(
 /* ─────────────────────────────────────────────────────────────────────────────
    Demo 1 — Naive brute force
    Enumerate every way to choose 4 squares from 16, validate the whole board.
-   C(16, 4) = 1,820 boards; show 10 real boards then truncate.
+   C(16, 4) = 1,820 boards in lexicographic order; the pseudocode RETURNS at the
+   first valid one, which is board #741 — so the honest run builds and judges
+   boards 1..741. Rejected boards are batched 3 per step, and every batch step
+   lists each board it covers with its real first conflict. No truncation.
 
    codeLine indexes problem.naive.pseudocode:
      0: 'for each way to place 4 queens on the 16 squares:'
@@ -147,6 +159,8 @@ interface NaiveState {
   checked: number
   /** True on the final summary step. */
   done: boolean
+  /** First board number of the batch this step covers (board shown = `checked`). */
+  batchStart?: number
 }
 
 function checkNaiveBoard(placement: [number, number][]): [[number, number], [number, number]] | null {
@@ -164,14 +178,37 @@ function checkNaiveBoard(placement: [number, number][]): [[number, number], [num
 
 function naiveSteps(): Step<NaiveState>[] {
   const steps: Step<NaiveState>[] = []
-  const TOTAL = 1820  // C(16, 4)
-  const SHOW_LIMIT = 10
+  const TOTAL = 1820 // C(16, 4)
+  const BATCH = 3    // rejected boards per step — every batch lists its real boards
+
+  let prevVars: VarEntry[] | null = null
+  const mkVars = (boardNo: string, placement: string, verdict: string, checked: number): VarEntry[] => {
+    const out = diffVars(prevVars, [
+      { name: 'board #', value: boardNo },
+      { name: 'placement', value: placement },
+      { name: 'verdict', value: verdict },
+      { name: 'boards checked', value: String(checked) },
+      { name: 'pair-checks', value: String(checked * 6) },
+    ])
+    prevVars = out
+    return out
+  }
+
+  const fmtPlacement = (p: [number, number][]) => p.map(([r, c]) => `(${r},${c})`).join(' ')
+  const clashText = (conflict: [[number, number], [number, number]]) => {
+    const [[ar, ac], [br, bc]] = conflict
+    const pair = `(${ar},${ac}) & (${br},${bc})`
+    if (ar === br) return `${pair} share row ${ar}`
+    if (ac === bc) return `${pair} share column ${ac}`
+    return `${pair} sit on the same diagonal (${Math.abs(ar - br)} apart)`
+  }
 
   // Intro sentinel
   steps.push({
     state: { placement: [], conflict: null, checked: 0, done: false },
-    description: `Brute force: pick any 4 of the 16 squares and validate afterwards. C(16, 4) = ${TOTAL} boards to examine — each needing up to 6 pair-checks, roughly 11,000 checks in all. Start generating.`,
+    description: `Brute force: pick any 4 of the 16 squares, build the FULL board, then judge it with 6 pair-checks. There are C(16,4) = ${TOTAL.toLocaleString('en-US')} such boards; the loop walks them in lexicographic order and returns at the first valid one. Rejected boards come ${BATCH} per step below — each step lists the actual boards it covers and the actual clash that killed each.`,
     codeLine: 0,
+    vars: mkVars('—', '—', '—', 0),
   })
 
   // Build the list of 16 squares in row-major order
@@ -181,7 +218,42 @@ function naiveSteps(): Step<NaiveState>[] {
       squares.push([r, c])
 
   let checked = 0
-  let shown = 0
+  let solution: [number, number][] | null = null
+  let batch: {
+    no: number
+    placement: [number, number][]
+    conflict: [[number, number], [number, number]]
+  }[] = []
+
+  const flushBatch = () => {
+    if (batch.length === 0) return
+    const first = batch[0]
+    const last = batch[batch.length - 1]
+    const texts = batch.map((b) => clashText(b.conflict))
+    const allSame = texts.every((t) => t === texts[0])
+    let description: string
+    if (allSame) {
+      const list = batch.map((b) => `#${b.no} ${fmtPlacement(b.placement)}`).join('; ')
+      description = `Same doom, rediscovered: queens ${texts[0]} — a clash visible after just two placements — yet ${
+        batch.length === 1 ? 'this finished board' : `each of these ${batch.length} finished boards`
+      } is fully built and judged before rejecting it: ${list}. ${batch.length * 6} pair-checks spent on ${batch.length} reject${batch.length === 1 ? '' : 's'}.`
+    } else {
+      const list = batch.map((b) => `#${b.no} ${fmtPlacement(b.placement)} — ${clashText(b.conflict)}`).join('; ')
+      description = `${batch.length} more boards fully built and judged, ${batch.length} rejects: ${list}. Each verdict only arrives after the whole board exists.`
+    }
+    steps.push({
+      state: { placement: last.placement, conflict: last.conflict, checked: last.no, done: false, batchStart: first.no },
+      description,
+      codeLine: 3,
+      vars: mkVars(
+        batch.length === 1 ? `${first.no}` : `${first.no}–${last.no}`,
+        fmtPlacement(last.placement),
+        `reject ×${batch.length}`,
+        last.no,
+      ),
+    })
+    batch = []
+  }
 
   outer:
   for (let a = 0; a < squares.length - 3; a++) {
@@ -192,45 +264,40 @@ function naiveSteps(): Step<NaiveState>[] {
           const placement: [number, number][] = [squares[a], squares[b], squares[c], squares[d]]
           const conflict = checkNaiveBoard(placement)
 
-          if (shown < SHOW_LIMIT) {
-            shown++
-            const posStr = placement.map(([r, cc]) => `(${r},${cc})`).join(' ')
-            const desc = conflict
-              ? `Board ${checked}: queens at ${posStr}. Pair (${conflict[0][0]},${conflict[0][1]}) and (${conflict[1][0]},${conflict[1][1]}) share a ${conflict[0][0] === conflict[1][0] ? 'row' : conflict[0][1] === conflict[1][1] ? 'column' : 'diagonal'} — reject.`
-              : `Board ${checked}: queens at ${posStr}. All 6 pairs pass — a valid placement!`
-            steps.push({
-              state: { placement, conflict, checked, done: false },
-              description: desc,
-              codeLine: conflict ? 3 : 5,
-            })
-            if (!conflict) break outer
+          if (conflict) {
+            batch.push({ no: checked, placement, conflict })
+            if (batch.length === BATCH) flushBatch()
+            continue
           }
 
-          if (shown === SHOW_LIMIT) break outer
+          // First valid board — the pseudocode returns here.
+          flushBatch()
+          solution = placement
+          steps.push({
+            state: { placement, conflict: null, checked, done: false },
+            description: `Board ${checked}: queens at ${fmtPlacement(placement)} — all 6 pair-checks pass: no shared row, column, or diagonal anywhere. This is the FIRST valid board, reached only after ${checked - 1} complete boards were built and rejected. Return it.`,
+            codeLine: 5,
+            vars: mkVars(String(checked), fmtPlacement(placement), 'valid — return', checked),
+          })
+          break outer
         }
       }
     }
   }
 
-  // Truncation step
+  // Genuine summary — totals match exactly what the steps above showed.
   steps.push({
-    state: { placement: [], conflict: null, checked: TOTAL, done: false },
-    description: `…and so on — ${TOTAL} boards built and pair-checked. A conflict visible after 2 placements is rediscovered on every board that contains that same doomed prefix. ~11,000 checks total.`,
-    codeLine: 2,
-  })
-
-  // Final verdict
-  steps.push({
-    state: { placement: [[0,1],[1,3],[2,0],[3,2]], conflict: null, checked: TOTAL, done: true },
-    description: `Done. 1 valid board found among ${TOTAL}: queens at columns [1, 3, 0, 2]. Cost: roughly 11,000 pair-checks. Backtracking finds the same answer after touching just 26 squares.`,
+    state: { placement: solution ?? [], conflict: null, checked, done: true },
+    description: `Honest totals: ${checked} of the ${TOTAL.toLocaleString('en-US')} possible boards were generated and judged — ${checked - 1} rejected, 1 valid — costing ${(checked * 6).toLocaleString('en-US')} pair-checks (6 per board). The remaining ${(TOTAL - checked).toLocaleString('en-US')} combinations were never built because "return" fired. Backtracking reaches the same queens after touching just 26 squares.`,
     codeLine: 5,
+    vars: mkVars(String(checked), solution ? fmtPlacement(solution) : '—', 'valid — return', checked),
   })
 
   return steps
 }
 
 function NaiveViz({ step }: { step: Step<NaiveState> }) {
-  const { placement, conflict, checked, done } = step.state
+  const { placement, conflict, checked, done, batchStart } = step.state
 
   // Build cells: placed queens as active, conflicting queens as conflict (rose)
   const conflictSet = new Set<string>()
@@ -258,7 +325,9 @@ function NaiveViz({ step }: { step: Step<NaiveState> }) {
     ? `${checked} boards checked · answer: columns [1, 3, 0, 2]`
     : placement.length === 0
       ? `board ${checked} · no queens yet`
-      : `board ${checked} · ${placement.map(([r, c]) => `(${r},${c})`).join(' ')}`
+      : batchStart !== undefined && batchStart !== checked
+        ? `boards ${batchStart}–${checked} · showing #${checked}`
+        : `board ${checked} · ${placement.map(([r, c]) => `(${r},${c})`).join(' ')}`
 
   const legend = (
     <div className="legend">
@@ -276,6 +345,9 @@ export const naiveDemo: AttemptDemo<NaiveState> = { generateSteps: naiveSteps, V
 /* ─────────────────────────────────────────────────────────────────────────────
    Demo 2 — Row rule: one queen per row, 4^4 = 256 boards
    Enumerate (c0,c1,c2,c3) ∈ {0..3}^4, validate the whole finished board.
+   The pseudocode RETURNS at the first valid board — [1, 3, 0, 2], which is
+   board #115 in this order — so the honest run shows every one of boards
+   1..115, one real step per board. No truncation.
 
    codeLine indexes journey[0].pseudocode:
      0: 'for each (c0, c1, c2, c3) in 0..3 × 0..3 × 0..3 × 0..3:'
@@ -306,17 +378,29 @@ function checkRowBoard(cols: number[]): [number, number] | null {
 function rowRuleSteps(): Step<RowRuleState>[] {
   const steps: Step<RowRuleState>[] = []
   const TOTAL = N ** N  // 256
-  const SHOW_LIMIT = 10
+
+  let prevVars: VarEntry[] | null = null
+  const mkVars = (boardNo: string, placement: string, verdict: string, checked: number): VarEntry[] => {
+    const out = diffVars(prevVars, [
+      { name: 'board #', value: boardNo },
+      { name: 'placement', value: placement },
+      { name: 'verdict', value: verdict },
+      { name: 'boards checked', value: String(checked) },
+      { name: 'pair-checks', value: String(checked * 6) },
+    ])
+    prevVars = out
+    return out
+  }
 
   // Intro sentinel
   steps.push({
     state: { cols: [], conflict: null, checked: 0, done: false },
-    description: `Row rule: one queen per row — choose a column for each of the 4 rows. 4^4 = ${TOTAL} boards instead of 1,820 — a real improvement. But verdicts still arrive only after the board is fully built.`,
+    description: `Row rule: one queen per row — choose a column for each of the 4 rows. 4^4 = ${TOTAL} boards instead of 1,820 — a real improvement. But verdicts still arrive only after the board is fully built; the loop walks the boards in order and returns at the first valid one. Every board it builds is shown below.`,
     codeLine: 0,
+    vars: mkVars('—', '—', '—', 0),
   })
 
   let checked = 0
-  let shown = 0
 
   outer:
   for (let c0 = 0; c0 < N; c0++) {
@@ -325,42 +409,45 @@ function rowRuleSteps(): Step<RowRuleState>[] {
         for (let c3 = 0; c3 < N; c3++) {
           checked++
           const cols = [c0, c1, c2, c3]
+          const colsStr = `[${cols.join(', ')}]`
           const conflict = checkRowBoard(cols)
 
-          if (shown < SHOW_LIMIT) {
-            shown++
-            const clashType = conflict
-              ? (cols[conflict[0]] === cols[conflict[1]] ? 'same column' : 'diagonal')
+          if (conflict) {
+            const [r, s] = conflict
+            const clash = cols[r] === cols[s]
+              ? `rows ${r} and ${s} both chose column ${cols[r]} — a straight vertical capture`
+              : `the queens at (${r},${cols[r]}) and (${s},${cols[s]}) sit on the same diagonal, ${s - r} row${s - r === 1 ? '' : 's'} and ${Math.abs(cols[r] - cols[s])} column${Math.abs(cols[r] - cols[s]) === 1 ? '' : 's'} apart`
+            const prefixNote = c0 === 0 && c1 === 0 && checked === 16
+              ? ` That rows-0/1 column-0 clash was visible after two placements, yet all 16 boards extending the doomed [0, 0, …] prefix were built and judged anyway — boards 1 through 16.`
               : ''
-            const desc = conflict
-              ? `Board ${checked}: columns [${cols.join(', ')}]. Rows ${conflict[0]} and ${conflict[1]} clash (${clashType}) — reject.`
-              : `Board ${checked}: columns [${cols.join(', ')}]. All 6 pairs pass — valid board!`
             steps.push({
               state: { cols, conflict, checked, done: false },
-              description: desc,
-              codeLine: conflict ? 3 : 4,
+              description: `Board ${checked} — columns ${colsStr}: ${clash}. Reject, but only after the whole board was assembled and pair-checked.${prefixNote}`,
+              codeLine: 3,
+              vars: mkVars(String(checked), colsStr, 'reject', checked),
             })
-            if (!conflict) break outer
+            continue
           }
 
-          if (shown === SHOW_LIMIT) break outer
+          // First valid board — the pseudocode returns here.
+          steps.push({
+            state: { cols, conflict: null, checked, done: false },
+            description: `Board ${checked} — columns ${colsStr}: all 6 row-pairs pass — no shared column, no shared diagonal. The FIRST valid board, reached only after ${checked - 1} finished boards were built and rejected. Return it.`,
+            codeLine: 4,
+            vars: mkVars(String(checked), colsStr, 'valid — return', checked),
+          })
+          break outer
         }
       }
     }
   }
 
-  // Truncation step — mirrors the breaks text
+  // Genuine summary — totals match exactly what the steps above showed.
   steps.push({
-    state: { cols: [], conflict: null, checked: TOTAL, done: false },
-    description: `…and so on — ${TOTAL} boards checked. The prefix [c0=0, c1=0] is a column clash visible after 2 placements; it appears in 16 of the 256 boards and is rediscovered 16 separate times. Up to ~1,500 pair-checks versus backtracking's 26 squares.`,
-    codeLine: 2,
-  })
-
-  // Final verdict
-  steps.push({
-    state: { cols: [1, 3, 0, 2], conflict: null, checked: TOTAL, done: true },
-    description: `Answer: columns [1, 3, 0, 2]. Correct — but ${TOTAL} complete boards built and validated. Backtracking touches just 26 squares and undoes only 4 placements.`,
+    state: { cols: [1, 3, 0, 2], conflict: null, checked, done: true },
+    description: `Honest totals: ${checked} of the ${TOTAL} one-per-row boards were generated and judged — ${checked - 1} rejected, 1 valid — costing ${checked * 6} pair-checks (6 per board). The remaining ${TOTAL - checked} boards were never built because "return" fired. Backtracking touches just 26 squares and undoes only 4 placements to find the same columns.`,
     codeLine: 4,
+    vars: mkVars(String(checked), '[1, 3, 0, 2]', 'valid — return', checked),
   })
 
   return steps
@@ -431,6 +518,7 @@ function greedyAttacker(queens: number[], row: number, col: number): [number, nu
 function greedySteps(): Step<GreedyState>[] {
   const steps: Step<GreedyState>[] = []
   const queens: number[] = []
+  let squaresChecked = 0
 
   const snap = (over: Partial<GreedyState>): GreedyState => ({
     queens: [...queens],
@@ -441,11 +529,26 @@ function greedySteps(): Step<GreedyState>[] {
     ...over,
   })
 
+  let prevVars: VarEntry[] | null = null
+  const fmtQueens = () =>
+    queens.length === 0 ? '[]' : `[${queens.map((c, r) => `r${r}c${c}`).join(', ')}]`
+  const mkVars = (row: number | string, col: number | string): VarEntry[] => {
+    const out = diffVars(prevVars, [
+      { name: 'row', value: String(row) },
+      { name: 'col', value: String(col) },
+      { name: 'queens', value: fmtQueens() },
+      { name: 'squares checked', value: String(squaresChecked) },
+    ])
+    prevVars = out
+    return out
+  }
+
   // Intro sentinel
   steps.push({
     state: snap({ caption: 'board empty · row 0 next' }),
     description: `Greedy: walk row by row, commit to the FIRST safe column found, and never revise a choice. Start at row 0.`,
     codeLine: 0,
+    vars: mkVars(0, '—'),
   })
 
   let hitDeadEnd = false
@@ -454,6 +557,7 @@ function greedySteps(): Step<GreedyState>[] {
     let placed = false
 
     for (let col = 0; col < N; col++) {
+      squaresChecked++
       const attacker = greedyAttacker(queens, row, col)
       if (attacker) {
         const [ar, ac] = attacker
@@ -462,8 +566,9 @@ function greedySteps(): Step<GreedyState>[] {
           : `queen at (${ar},${ac}) sees it diagonally`
         steps.push({
           state: snap({ tryPos: [row, col], attackedBy: attacker, caption: `row ${row} · col ${col} attacked` }),
-          description: `Row ${row}, col ${col}: attacked — ${why}. Skip.`,
+          description: `Row ${row}, col ${col}: attacked — ${why}. Move on to the next column of this row.`,
           codeLine: 1,
+          vars: mkVars(row, col),
         })
         continue
       }
@@ -474,6 +579,7 @@ function greedySteps(): Step<GreedyState>[] {
         state: snap({ tryPos: [row, col], caption: `row ${row} · commit to col ${col}` }),
         description: `Row ${row}, col ${col}: safe. Greedy commits here and never looks back. Queen ${queens.length} placed at (${row},${col}).`,
         codeLine: 3,
+        vars: mkVars(row, col),
       })
       placed = true
       break
@@ -485,8 +591,9 @@ function greedySteps(): Step<GreedyState>[] {
       // Use deadEnd flag so the visualizer can highlight every cell in the stuck row
       steps.push({
         state: snap({ deadEnd: true, caption: `row ${row} · every column attacked — dead end` }),
-        description: `Row ${row}: col 0 shares the column with (0,0); col 1 is on a diagonal from (1,2); col 2 is on a diagonal from (0,0); col 3 is on a diagonal from (1,2). Every square in row ${row} is attacked. Greedy returns "no solution" — yet [1, 3, 0, 2] solves the board. Each pick was locally safe; together they paint the algorithm into a corner it cannot escape.`,
+        description: `Row ${row}: col 0 shares the column with (0,0); col 1 is on a diagonal from (1,2); col 2 is on a diagonal from (0,0); col 3 is on a diagonal from (1,2). Every square in row ${row} is attacked — all ${squaresChecked} squares checked so far, no escape. Greedy returns "no solution" — yet [1, 3, 0, 2] solves the board. Each pick was locally safe; together they paint the algorithm into a corner it cannot escape.`,
         codeLine: 2,
+        vars: mkVars(row, '—'),
       })
       break
     }
@@ -498,6 +605,7 @@ function greedySteps(): Step<GreedyState>[] {
       state: snap({ caption: 'board complete' }),
       description: `All ${N} queens placed — done.`,
       codeLine: 4,
+      vars: mkVars(N, '—'),
     })
   }
 

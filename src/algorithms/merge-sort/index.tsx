@@ -1,4 +1,4 @@
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
 import { naiveDemo, insertionDemo, naiveSplitDemo } from './demos'
 import { ARR as _ARR } from './data'
 
@@ -24,18 +24,44 @@ interface MSState {
 function generateSteps(): Step<MSState>[] {
   const steps: Step<MSState>[] = []
   const a = [...ARR]
+  let comparisons = 0
+
+  const fmtArr = (xs: number[] | null) => (xs === null ? '—' : `[${xs.join(', ')}]`)
+  const fmtNum = (x: number | null) => (x === null ? '—' : String(x))
+  const msVars = (
+    lo: number | null,
+    hi: number | null,
+    mid: number | null,
+    left: number[] | null,
+    right: number[] | null,
+    out: number[] | null,
+    changed: string[],
+  ): VarEntry[] => {
+    const c = (n: string) => (changed.includes(n) ? { changed: true as const } : {})
+    return [
+      { name: 'lo', value: fmtNum(lo), ...c('lo') },
+      { name: 'hi', value: fmtNum(hi), ...c('hi') },
+      { name: 'mid', value: fmtNum(mid), ...c('mid') },
+      { name: 'left run', value: fmtArr(left), ...c('left run') },
+      { name: 'right run', value: fmtArr(right), ...c('right run') },
+      { name: 'output', value: fmtArr(out), ...c('output') },
+      { name: 'comparisons', value: String(comparisons), ...c('comparisons') },
+    ]
+  }
 
   steps.push({
     state: { arr: [...a], lo: -1, hi: -1, k: -1, rs: -1, depth: 0, phase: 'intro' },
     description: `The goal: sort the eight scrambled values [${a.join(', ')}] into ascending order. Merge sort's promise: never sort a messy array directly — split it until every piece is trivially sorted, then zipping sorted pieces together is the easy part.`,
     codeLine: 0,
+    vars: msVars(null, null, null, null, null, null, []),
   })
 
-  const emitSplit = (lo: number, hi: number, depth: number, text: string) => {
+  const emitSplit = (lo: number, hi: number, mid: number, depth: number, text: string) => {
     steps.push({
       state: { arr: [...a], lo, hi, k: lo, rs: -1, depth, phase: 'split' },
       description: text,
       codeLine: 2,
+      vars: msVars(lo, hi, mid, a.slice(lo, mid + 1), a.slice(mid + 1, hi + 1), null, ['lo', 'hi', 'mid', 'left run', 'right run']),
     })
   }
 
@@ -50,6 +76,7 @@ function generateSteps(): Step<MSState>[] {
       const pair = x <= y ? [x, y] : [y, x]
       a[lo] = pair[0]
       a[hi] = pair[1]
+      comparisons++
       steps.push({
         state: { arr: [...a], lo, hi, k: hi + 1, rs: -1, depth, phase: 'merge' },
         description:
@@ -57,6 +84,7 @@ function generateSteps(): Step<MSState>[] {
             ? `${x} vs ${y} — already in order. Each single element is sorted by definition (the base case), so one comparison certifies the sorted pair [${x}, ${y}].`
             : `${x} vs ${y} — take ${y} first. Two singletons are each "sorted", so a single comparison zips them into the sorted pair [${y}, ${x}].`,
         codeLine: 6,
+        vars: msVars(lo, hi, lo, [], [], pair, ['lo', 'hi', 'mid', 'left run', 'right run', 'output', 'comparisons']),
       })
       return
     }
@@ -65,6 +93,7 @@ function generateSteps(): Step<MSState>[] {
       state: { arr: [...a], lo, hi, k: lo, rs: mid + 1, depth, phase: 'merge' },
       description: `Both halves of a[${lo}..${hi}] are now sorted: [${left.join(', ')}] and [${right.join(', ')}]. Merge them: repeatedly compare the two front values and take the smaller — the front of a sorted list is its minimum, so the winner beats everything still waiting.`,
       codeLine: 5,
+      vars: msVars(lo, hi, mid, left, right, [], ['lo', 'hi', 'mid', 'left run', 'right run', 'output']),
     })
 
     let i = 0
@@ -78,6 +107,7 @@ function generateSteps(): Step<MSState>[] {
       if (takeLeft) i++
       else j++
       merged.push(taken)
+      comparisons++
       const view = [...a.slice(0, lo), ...merged, ...left.slice(i), ...right.slice(j), ...a.slice(hi + 1)]
       steps.push({
         state: {
@@ -91,6 +121,7 @@ function generateSteps(): Step<MSState>[] {
         },
         description: `${lf} vs ${rf} — take ${taken} from the ${takeLeft ? 'left' : 'right'} half. Nothing behind either front can be smaller, so ${taken} is locked into position ${lo + merged.length - 1} forever.`,
         codeLine: 6,
+        vars: msVars(lo, hi, mid, left.slice(i), right.slice(j), [...merged], [takeLeft ? 'left run' : 'right run', 'output', 'comparisons']),
       })
     }
 
@@ -102,15 +133,16 @@ function generateSteps(): Step<MSState>[] {
       state: { arr: [...a], lo, hi, k: hi + 1, rs: -1, depth, phase: 'merge' },
       description: `The ${leftoverFromLeft ? 'right' : 'left'} half ran dry. The leftover${rem.length > 1 ? 's' : ''} [${rem.join(', ')}] ${rem.length > 1 ? 'are' : 'is'} already sorted and bigger than everything placed, so append wholesale — no more comparisons needed. a[${lo}..${hi}] is now [${merged.join(', ')}].`,
       codeLine: 7,
+      vars: msVars(lo, hi, mid, [], [], [...merged], [leftoverFromLeft ? 'left run' : 'right run', 'output']),
     })
   }
 
-  emitSplit(0, 7, 0, `Split a[0..7] at mid = 3: left [${a.slice(0, 4).join(', ')}], right [${a.slice(4).join(', ')}]. Neither half is sorted yet — and we don't care. Recursion will fully sort each half before we ever try to merge them.`)
-  emitSplit(0, 3, 1, `Recurse into the left half first. Split a[0..3] into [${a.slice(0, 2).join(', ')}] and [${a.slice(2, 4).join(', ')}]. One more split turns these pairs into single elements — and a single element is sorted by definition. The recursion bottoms out at depth 3.`)
+  emitSplit(0, 7, 3, 0, `Split a[0..7] at mid = 3: left [${a.slice(0, 4).join(', ')}], right [${a.slice(4).join(', ')}]. Neither half is sorted yet — and we don't care. Recursion will fully sort each half before we ever try to merge them.`)
+  emitSplit(0, 3, 1, 1, `Recurse into the left half first. Split a[0..3] at mid = 1 into [${a.slice(0, 2).join(', ')}] and [${a.slice(2, 4).join(', ')}]. One more split turns these pairs into single elements — and a single element is sorted by definition. The recursion bottoms out at depth 3.`)
   emitMerge(0, 0, 1, 2)
   emitMerge(2, 2, 3, 2)
   emitMerge(0, 1, 3, 1)
-  emitSplit(4, 7, 1, `Left half a[0..3] is fully sorted. Now the right half: split a[4..7] into [${a.slice(4, 6).join(', ')}] and [${a.slice(6, 8).join(', ')}] and drive each pair down to singletons.`)
+  emitSplit(4, 7, 5, 1, `Left half a[0..3] is fully sorted. Now the right half: split a[4..7] at mid = 5 into [${a.slice(4, 6).join(', ')}] and [${a.slice(6, 8).join(', ')}] and drive each pair down to singletons.`)
   emitMerge(4, 4, 5, 2)
   emitMerge(6, 6, 7, 2)
   emitMerge(4, 5, 7, 1)
@@ -118,8 +150,9 @@ function generateSteps(): Step<MSState>[] {
 
   steps.push({
     state: { arr: [...a], lo: 0, hi: 7, k: 8, rs: -1, depth: 0, phase: 'sorted' },
-    description: `Done: [${a.join(', ')}] — all 8 values in ascending order. Three levels of merging, and every level touched all 8 elements exactly once: log₂ 8 = 3 levels × 8 elements = 24 placements, versus up to 28 pair-comparisons (and ~n²/2 growth) for a naive sort. That is n·log n in action.`,
+    description: `Done: [${a.join(', ')}] — all 8 values in ascending order. Three levels of merging, and every level touched all 8 elements exactly once: log₂ 8 = 3 levels × 8 elements = 24 placements and only ${comparisons} front-vs-front comparisons, versus up to 28 pair-comparisons (and ~n²/2 growth) for a naive sort. That is n·log n in action.`,
     codeLine: -1,
+    vars: msVars(0, 7, 3, [], [], [...a], []),
   })
 
   return steps

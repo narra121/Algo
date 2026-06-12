@@ -1,4 +1,4 @@
-import type { AttemptDemo, Step } from '../../core/types'
+import type { AttemptDemo, Step, VarEntry } from '../../core/types'
 import { Cells, Legend, VizCaption } from '../../components/vizPrimitives'
 import { ARR, SORTED } from './data'
 
@@ -27,82 +27,86 @@ function bubbleSteps(): Step<BubbleState>[] {
   const a = [...ARR]
   const n = a.length
 
+  let totalSwaps = 0
+  let totalComps = 0
+
+  const fmtBool = (b: boolean | null) => (b === null ? '—' : String(b))
+  const bubbleVars = (
+    pass: number | null,
+    i: number | null,
+    swapped: boolean | null,
+    changed: string[],
+  ): VarEntry[] => {
+    const c = (nm: string) => (changed.includes(nm) ? { changed: true as const } : {})
+    return [
+      { name: 'pass', value: pass === null ? '—' : String(pass), ...c('pass') },
+      { name: 'i', value: i === null ? '—' : String(i), ...c('i') },
+      { name: 'swapped', value: fmtBool(swapped), ...c('swapped') },
+      { name: 'comparisons', value: String(totalComps), ...c('comparisons') },
+      { name: 'swaps', value: String(totalSwaps), ...c('swaps') },
+    ]
+  }
+
   // Sentinel intro — no duplicate of first real frame
   steps.push({
     state: { arr: [...a], passI: -1, scanI: -1, swapCount: 0, compCount: 0, phase: 'intro' },
     description: `Bubble sort on [${ARR.join(', ')}]: sweep left to right, swap every adjacent pair that is out of order, repeat until a full pass finds nothing to fix. Up to n·(n−1)/2 = ${(n * (n - 1)) / 2} pair-comparisons — 28 — for these 8 numbers.`,
     codeLine: 0,
+    vars: bubbleVars(null, null, null, []),
   })
 
-  let totalSwaps = 0
-  let totalComps = 0
-
-  // Run pass 1 fully (the most instructive pass — 7 comparisons)
-  {
-    const passI = 1
-    let swapped = false
-    for (let i = 0; i < n - 1; i++) {
-      totalComps++
-      if (a[i] > a[i + 1]) {
-        const lo = a[i]
-        const hi = a[i + 1]
-        ;[a[i], a[i + 1]] = [a[i + 1], a[i]]
-        totalSwaps++
-        swapped = true
-        steps.push({
-          state: { arr: [...a], passI, scanI: i, swapCount: totalSwaps, compCount: totalComps, phase: 'swap' },
-          description: `Pass ${passI}, comparison ${totalComps}: ${lo} > ${hi} — swap. Array is now [${a.join(', ')}]. One swap, but ${lo} only moved one slot.`,
-          codeLine: 4,
-        })
-      } else {
-        steps.push({
-          state: { arr: [...a], passI, scanI: i, swapCount: totalSwaps, compCount: totalComps, phase: 'scan' },
-          description: `Pass ${passI}, comparison ${totalComps}: ${a[i]} ≤ ${a[i + 1]} — already in order, no swap.`,
-          codeLine: 3,
-        })
-      }
-    }
-    // After pass 1: 82 is settled at the end; find where 5 landed
-    const fiveIdx = a.indexOf(5)
-    steps.push({
-      state: { arr: [...a], passI, scanI: -1, swapCount: totalSwaps, compCount: totalComps, phase: 'scan' },
-      description: `Pass 1 done: ${n - 1} comparisons, ${totalSwaps} swaps. The largest value 82 has bubbled to position ${n - 1}. But 5 is now at index ${fiveIdx} — it belongs at index 1 and has ${fiveIdx - 1} more positions to travel, one per pass.`,
-      codeLine: 5,
-    })
-  }
-
-  // Simulate remaining passes fully to get honest counts, but show a summary step
-  let passNum = 2
-  let cont = true
-  while (cont) {
+  // Run EVERY pass fully — one real step per comparison, plus a pass-end step.
+  let pass = 0
+  let sweptClean = false
+  while (!sweptClean) {
+    pass++
     let swapped = false
     let passSwaps = 0
-    for (let i = 0; i < n - passNum; i++) {
+    const limit = n - pass // last (pass−1) slots already settled by earlier passes
+    for (let i = 0; i < limit; i++) {
       totalComps++
+      const firstOfPass = i === 0
       if (a[i] > a[i + 1]) {
+        const big = a[i]
+        const small = a[i + 1]
         ;[a[i], a[i + 1]] = [a[i + 1], a[i]]
         totalSwaps++
         passSwaps++
         swapped = true
+        steps.push({
+          state: { arr: [...a], passI: pass, scanI: i, swapCount: totalSwaps, compCount: totalComps, phase: 'swap' },
+          description: `Pass ${pass}, comparison ${totalComps}: ${big} > ${small} — out of order, swap. ${big} drifts one slot right and the array is now [${a.join(', ')}]; ${small} gained exactly one position.`,
+          codeLine: 4,
+          vars: bubbleVars(pass, i, true, firstOfPass ? ['pass', 'i', 'swapped', 'comparisons', 'swaps'] : ['i', 'swapped', 'comparisons', 'swaps']),
+        })
+      } else {
+        steps.push({
+          state: { arr: [...a], passI: pass, scanI: i, swapCount: totalSwaps, compCount: totalComps, phase: 'scan' },
+          description: `Pass ${pass}, comparison ${totalComps}: ${a[i]} ≤ ${a[i + 1]} — already in order, no swap. The pair was still re-examined: bubble sort pays a comparison whether or not it learns anything new.`,
+          codeLine: 3,
+          vars: bubbleVars(pass, i, swapped, firstOfPass ? ['pass', 'i', 'swapped', 'comparisons'] : ['i', 'comparisons']),
+        })
       }
     }
-    if (!swapped) cont = false
-    passNum++
+    if (!swapped) sweptClean = true
+    const settled = a[n - pass]
+    const fiveIdx = a.indexOf(5)
+    steps.push({
+      state: { arr: [...a], passI: pass, scanI: -1, swapCount: totalSwaps, compCount: totalComps, phase: 'summary' },
+      description: swapped
+        ? `Pass ${pass} done: ${limit} comparison${limit !== 1 ? 's' : ''}, ${passSwaps} swap${passSwaps !== 1 ? 's' : ''} — ${settled} has bubbled into its final slot at index ${n - pass}${fiveIdx > 1 ? `, yet 5 still sits at index ${fiveIdx}, ${fiveIdx - 1} slot${fiveIdx - 1 !== 1 ? 's' : ''} from home` : ''}. swapped = true, so sweep again.`
+        : `Pass ${pass} done: ${limit} comparison${limit !== 1 ? 's' : ''}, zero swaps — a fully clean sweep is the only proof bubble sort accepts that the array [${a.join(', ')}] is sorted, so the loop stops.`,
+      codeLine: 5,
+      vars: bubbleVars(pass, null, swapped, []),
+    })
   }
-  const totalPasses = passNum - 1
 
-  // Summary step (≥8 real steps already; now summarize remaining passes)
-  steps.push({
-    state: { arr: [...a], passI: totalPasses, scanI: -1, swapCount: totalSwaps, compCount: totalComps, phase: 'summary' },
-    description: `Passes 2–${totalPasses} continue the same pattern — ${totalComps - (n - 1)} more comparisons across ${totalPasses - 1} passes, each bubbling one more large value into place. Running total: ${totalComps} comparisons, ${totalSwaps} swaps.`,
-    codeLine: 0,
-  })
-
-  // Verdict
+  // Verdict — every pass was shown above; these totals were all played out.
   steps.push({
     state: { arr: [...SORTED], passI: -1, scanI: -1, swapCount: totalSwaps, compCount: totalComps, phase: 'verdict' },
-    description: `Done: [${SORTED.join(', ')}] in ${totalPasses} passes, ${totalComps} comparisons, ${totalSwaps} swaps. Each pass moves every value at most ONE slot — a value displaced 6 positions (like 5) needs 6 separate passes to travel home. Compare with merge sort's 3 levels of cheap zips: the same 8 numbers in 24 placements.`,
+    description: `Done: [${SORTED.join(', ')}] in ${pass} passes, ${totalComps} comparisons, ${totalSwaps} swaps — every one shown above. Each pass moves a value at most ONE slot — 5, displaced 6 positions, needed 6 separate passes to travel home. Compare with merge sort's 3 levels of cheap zips: the same 8 numbers in 24 placements.`,
     codeLine: -1,
+    vars: bubbleVars(pass, null, false, []),
   })
 
   return steps
@@ -120,7 +124,7 @@ function BubbleViz({ step }: { step: Step<BubbleState> }) {
       <VizCaption>
         {phase === 'intro' && `unsorted input · n = ${n}`}
         {(phase === 'scan' || phase === 'swap') && `pass ${passI} · comparisons = ${compCount} · swaps = ${swapCount}`}
-        {phase === 'summary' && `passes 2–${passI} done · ${compCount} comparisons total`}
+        {phase === 'summary' && `pass ${passI} done · ${compCount} comparisons · ${swapCount} swaps`}
         {phase === 'verdict' && `sorted · ${compCount} comparisons · ${swapCount} swaps`}
       </VizCaption>
       <Cells
@@ -171,160 +175,99 @@ interface InsertionState {
   insertX: number | null  // value being inserted
   scanJ: number     // current j (shift position), -1 when not scanning
   totalShifts: number
-  phase: 'intro' | 'pick' | 'shift' | 'place' | 'summary' | 'verdict'
-}
-
-// Compute per-element shift counts honestly
-function computeInsertionShifts(arr: number[]): { shifts: number[]; total: number } {
-  const a = [...arr]
-  const shifts: number[] = []
-  let total = 0
-  for (let i = 1; i < a.length; i++) {
-    const x = a[i]
-    let j = i - 1
-    let s = 0
-    while (j >= 0 && a[j] > x) {
-      a[j + 1] = a[j]
-      j--
-      s++
-    }
-    a[j + 1] = x
-    shifts.push(s)
-    total += s
-  }
-  return { shifts, total }
+  phase: 'intro' | 'pick' | 'shift' | 'place' | 'verdict'
 }
 
 function insertionSteps(): Step<InsertionState>[] {
   const steps: Step<InsertionState>[] = []
   const a = [...ARR]
   const n = a.length
-  const { shifts, total } = computeInsertionShifts([...ARR])
+  let runningShifts = 0
+
+  const insVars = (
+    i: number | null,
+    x: number | null,
+    j: number | null,
+    prefix: number[] | null,
+    changed: string[],
+  ): VarEntry[] => {
+    const c = (nm: string) => (changed.includes(nm) ? { changed: true as const } : {})
+    const num = (v: number | null) => (v === null ? '—' : String(v))
+    return [
+      { name: 'i', value: num(i), ...c('i') },
+      { name: 'x', value: num(x), ...c('x') },
+      { name: 'j', value: num(j), ...c('j') },
+      { name: 'sorted prefix', value: prefix === null ? '—' : `[${prefix.join(', ')}]`, ...c('sorted prefix') },
+      { name: 'shifts', value: String(runningShifts), ...c('shifts') },
+    ]
+  }
 
   // Sentinel intro
   steps.push({
     state: { arr: [...a], outerI: -1, insertX: null, scanJ: -1, totalShifts: 0, phase: 'intro' },
-    description: `Insertion sort on [${ARR.join(', ')}]: grow a sorted prefix — pick each new element and slide it leftward past everything larger until it sits in place. Every comparison now places something (better than bubble!), but each value still moves ONE slot per shift.`,
+    description: `Insertion sort on [${ARR.join(', ')}]: grow a sorted prefix — pick each new element and slide it leftward past everything larger until it sits in place. Every comparison now places something (better than bubble!), but each value still moves ONE slot per shift. The prefix starts as just [${a[0]}], sorted by definition.`,
     codeLine: 0,
+    vars: insVars(null, null, null, [a[0]], []),
   })
 
-  let runningShifts = 0
-
-  // Show i=1 (insert 27) and i=6 (insert 10) and i=7 (insert 5) in full
-  // Summarize i=2..5 to stay within 8-25 steps
-
-  // --- i = 1: insert 27 (1 shift) ---
-  {
-    const i = 1
+  // Run EVERY insertion i = 1..7 for real — pick, each one-slot shift, place.
+  for (let i = 1; i < n; i++) {
     const x = a[i]
+    const prefix = a.slice(0, i)
+    const needed = prefix.filter(v => v > x).length
+
+    if (needed === 0) {
+      // x is already ≥ the prefix max: one comparison, zero shifts — pick and place in one honest step.
+      steps.push({
+        state: { arr: [...a], outerI: i, insertX: x, scanJ: i, totalShifts: runningShifts, phase: 'place' },
+        description: `i = ${i}: pick x = ${x}. The prefix's largest value ${prefix[i - 1]} ≤ ${x}, so a single comparison proves ${x} already sits where it belongs — 0 shifts. Sorted prefix grows to [${a.slice(0, i + 1).join(', ')}].`,
+        codeLine: 5,
+        vars: insVars(i, x, i - 1, a.slice(0, i + 1), ['i', 'x', 'j', 'sorted prefix']),
+      })
+      continue
+    }
+
     steps.push({
       state: { arr: [...a], outerI: i, insertX: x, scanJ: i, totalShifts: runningShifts, phase: 'pick' },
-      description: `i = ${i}: pick x = ${x}. Sorted prefix so far: [${a.slice(0, i).join(', ')}]. Slide ${x} left past anything larger.`,
+      description: `i = ${i}: pick x = ${x}. Sorted prefix: [${prefix.join(', ')}] — ${needed} of its value${needed !== 1 ? 's are' : ' is'} larger than ${x}, so ${x} must crawl ${needed} slot${needed !== 1 ? 's' : ''} left, one shift at a time.`,
       codeLine: 1,
+      vars: insVars(i, x, i - 1, prefix, ['i', 'x', 'j']),
     })
+
     let j = i - 1
+    let done = 0
     while (j >= 0 && a[j] > x) {
+      const moved = a[j]
       a[j + 1] = a[j]
       runningShifts++
+      done++
+      const isLast = j === 0 || a[j - 1] <= x
       steps.push({
         state: { arr: [...a], outerI: i, insertX: x, scanJ: j, totalShifts: runningShifts, phase: 'shift' },
-        description: `${a[j + 1]} > ${x} — shift ${a[j + 1]} right one slot (shift #${runningShifts} total). Slot ${j + 1} freed.`,
+        description: isLast
+          ? `${moved} > ${x} — shift ${moved} right one slot (shift #${runningShifts} overall). ${j === 0 ? 'The gap has reached the front of the array' : `${a[j - 1]}, just ahead, is ≤ ${x}`}, so the slide ends here.`
+          : `${moved} > ${x} — shift ${moved} right one slot (shift #${runningShifts} overall). The gap moves to index ${j}; ${needed - done} larger value${needed - done !== 1 ? 's' : ''} still stand${needed - done === 1 ? 's' : ''} between ${x} and its home.`,
         codeLine: 3,
+        vars: insVars(i, x, j - 1, prefix, ['j', 'shifts']),
       })
       j--
     }
+
     a[j + 1] = x
     steps.push({
       state: { arr: [...a], outerI: i, insertX: x, scanJ: j + 1, totalShifts: runningShifts, phase: 'place' },
-      description: `Place ${x} at index ${j + 1}. Sorted prefix: [${a.slice(0, i + 1).join(', ')}]. ${shifts[i - 1]} shift${shifts[i - 1] !== 1 ? 's' : ''} for this element.`,
+      description: `Place ${x} into the gap at index ${j + 1}: everything left of it is ≤ ${x}, everything right is larger. ${needed} one-slot shift${needed !== 1 ? 's' : ''} for this element; sorted prefix is now [${a.slice(0, i + 1).join(', ')}].`,
       codeLine: 5,
+      vars: insVars(i, x, j, a.slice(0, i + 1), ['sorted prefix']),
     })
   }
 
-  // --- i = 2..5: simulate honestly, emit one summary step ---
-  {
-    const beforeSummary = runningShifts
-    for (let i = 2; i <= 5; i++) {
-      const x = a[i]
-      let j = i - 1
-      while (j >= 0 && a[j] > x) {
-        a[j + 1] = a[j]
-        runningShifts++
-        j--
-      }
-      a[j + 1] = x
-    }
-    const summaryShifts = runningShifts - beforeSummary
-    steps.push({
-      state: { arr: [...a], outerI: 5, insertX: null, scanJ: -1, totalShifts: runningShifts, phase: 'summary' },
-      description: `Elements i = 2 to 5 ([43, 3, 9, 82]) inserted in turn — ${summaryShifts} more shifts. 3 slid past three neighbors; 9 past three; 43 and 82 needed no shifts at all. Running total: ${runningShifts} shifts, sorted prefix now [${a.slice(0, 6).join(', ')}].`,
-      codeLine: 0,
-    })
-  }
-
-  // --- i = 6: insert 10 (4 shifts) ---
-  {
-    const i = 6
-    const x = a[i]
-    steps.push({
-      state: { arr: [...a], outerI: i, insertX: x, scanJ: i, totalShifts: runningShifts, phase: 'pick' },
-      description: `i = ${i}: pick x = ${x}. Sorted prefix: [${a.slice(0, i).join(', ')}]. Watch ${x} slide left.`,
-      codeLine: 1,
-    })
-    let j = i - 1
-    while (j >= 0 && a[j] > x) {
-      a[j + 1] = a[j]
-      runningShifts++
-      steps.push({
-        state: { arr: [...a], outerI: i, insertX: x, scanJ: j, totalShifts: runningShifts, phase: 'shift' },
-        description: `${a[j + 1]} > ${x} — shift right (shift #${runningShifts}). One slot closer to home.`,
-        codeLine: 3,
-      })
-      j--
-    }
-    a[j + 1] = x
-    steps.push({
-      state: { arr: [...a], outerI: i, insertX: x, scanJ: j + 1, totalShifts: runningShifts, phase: 'place' },
-      description: `Place ${x} at index ${j + 1}. ${shifts[i - 1]} shifts for this element. Sorted prefix: [${a.slice(0, i + 1).join(', ')}].`,
-      codeLine: 5,
-    })
-  }
-
-  // --- i = 7: insert 5 (6 shifts — the dramatic case) ---
-  {
-    const i = 7
-    const x = a[i]
-    steps.push({
-      state: { arr: [...a], outerI: i, insertX: x, scanJ: i, totalShifts: runningShifts, phase: 'pick' },
-      description: `i = ${i}: pick x = ${x} — the last and smallest remaining value. Sorted prefix: [${a.slice(0, i).join(', ')}]. Six of the seven prefix values are larger; ${x} must crawl ${shifts[i - 1]} slots to its place.`,
-      codeLine: 1,
-    })
-    let j = i - 1
-    while (j >= 0 && a[j] > x) {
-      a[j + 1] = a[j]
-      runningShifts++
-      steps.push({
-        state: { arr: [...a], outerI: i, insertX: x, scanJ: j, totalShifts: runningShifts, phase: 'shift' },
-        description: j === 1 && a[j - 1] <= x
-          ? `${a[j + 1]} > ${x} — shift right (shift #${runningShifts}). 9 steps aside — and 3, ahead of it, is smaller than ${x}, so the slide ends here.`
-          : `${a[j + 1]} > ${x} — shift right (shift #${runningShifts}). ${x} still needs to pass ${j} more value${j !== 1 ? 's' : ''}.`,
-        codeLine: 3,
-      })
-      j--
-    }
-    a[j + 1] = x
-    steps.push({
-      state: { arr: [...a], outerI: i, insertX: x, scanJ: j + 1, totalShifts: runningShifts, phase: 'place' },
-      description: `Place ${x} at index ${j + 1}. ${shifts[i - 1]} shifts to move ${x} from position ${i} to position ${j + 1} — one slot at a time. Total shifts: ${runningShifts}.`,
-      codeLine: 5,
-    })
-  }
-
-  // Verdict
+  // Verdict — all 7 insertions and all 17 shifts were shown above.
   steps.push({
-    state: { arr: [...SORTED], outerI: -1, insertX: null, scanJ: -1, totalShifts: total, phase: 'verdict' },
-    description: `Done: [${SORTED.join(', ')}] in ${total} shifts — leaner than bubble sort's repeated passes, but the O(n²) wall remains: 5 traveled 6 positions via 6 one-slot shifts. In a reversed million-element array every element crawls home one step at a time: ~500 billion shifts, just as before.`,
+    state: { arr: [...SORTED], outerI: -1, insertX: null, scanJ: -1, totalShifts: runningShifts, phase: 'verdict' },
+    description: `Done: [${SORTED.join(', ')}] in ${runningShifts} shifts — leaner than bubble sort's repeated passes, but the O(n²) wall remains: 5 traveled 6 positions via 6 one-slot shifts. In a reversed million-element array every element crawls home one step at a time: ~500 billion shifts, just as before.`,
     codeLine: -1,
+    vars: insVars(null, null, null, [...SORTED], []),
   })
 
   return steps
@@ -339,14 +282,13 @@ function InsertionViz({ step }: { step: Step<InsertionState> }) {
         {phase === 'pick' && `i = ${outerI} · picking x = ${insertX} · shifts so far = ${totalShifts}`}
         {phase === 'shift' && `shifting right · x = ${insertX} · shifts so far = ${totalShifts}`}
         {phase === 'place' && `placed · shifts so far = ${totalShifts}`}
-        {phase === 'summary' && `i = 2..5 inserted · shifts so far = ${totalShifts}`}
         {phase === 'verdict' && `sorted · ${totalShifts} total shifts`}
       </VizCaption>
       <Cells
         values={arr}
         classFor={k => {
           if (phase === 'verdict') return 'done'
-          if (phase === 'intro' || phase === 'summary') return phase === 'summary' && outerI >= 0 && k <= outerI ? 'done' : ''
+          if (phase === 'intro') return ''
           // sorted prefix = [0 .. outerI-1] (before current insertion) or [0..outerI] (after place)
           const sortedEnd = phase === 'place' ? outerI : outerI - 1
           if (k <= sortedEnd && k !== scanJ) return 'done'
@@ -407,6 +349,23 @@ function naiveSplitSteps(): Step<NaiveSplitState>[] {
   // Seam: last element of left half vs first element of right half
   const seamIdx = mid - 1  // 43 is at index 3; 5 is at index 4
 
+  const splitVars = (
+    m: number | null,
+    left: number[] | null,
+    right: number[] | null,
+    answer: number[] | null,
+    changed: string[],
+  ): VarEntry[] => {
+    const c = (nm: string) => (changed.includes(nm) ? { changed: true as const } : {})
+    const arr = (xs: number[] | null) => (xs === null ? '—' : `[${xs.join(', ')}]`)
+    return [
+      { name: 'mid', value: m === null ? '—' : String(m), ...c('mid') },
+      { name: 'left', value: arr(left), ...c('left') },
+      { name: 'right', value: arr(right), ...c('right') },
+      { name: 'answer', value: arr(answer), ...c('answer') },
+    ]
+  }
+
   const blank = (phase: NaiveSplitState['phase'], overrides: Partial<NaiveSplitState> = {}): NaiveSplitState => ({
     arr: [...ARR],
     leftHalf: [],
@@ -424,6 +383,7 @@ function naiveSplitSteps(): Step<NaiveSplitState>[] {
     state: blank('intro'),
     description: `Divide-and-conquer on [${ARR.join(', ')}]: sorting a half-size array is cheaper — split at the midpoint, sort each half on its own, then concatenate. The plan: left half [${leftOrig.join(', ')}] and right half [${rightOrig.join(', ')}].`,
     codeLine: 0,
+    vars: splitVars(null, null, null, null, []),
   })
 
   // Split step
@@ -431,6 +391,7 @@ function naiveSplitSteps(): Step<NaiveSplitState>[] {
     state: blank('split', { leftHalf: leftOrig, rightHalf: rightOrig }),
     description: `Split at mid = ${mid}: left = [${leftOrig.join(', ')}], right = [${rightOrig.join(', ')}]. Each half is 4 elements — sorting a 4-element array costs roughly 4² = 16 units vs 8² = 64 for the whole; that is a real gain.`,
     codeLine: 0,
+    vars: splitVars(mid, leftOrig, rightOrig, null, ['mid', 'left', 'right']),
   })
 
   // Walk through sorting the left half with a few concrete observations
@@ -438,12 +399,14 @@ function naiveSplitSteps(): Step<NaiveSplitState>[] {
     state: blank('sorted-left', { leftHalf: leftOrig, rightHalf: rightOrig, leftSorted: false }),
     description: `Sorting left half [${leftOrig.join(', ')}] recursively. 3 is the smallest — it must travel from index 3 all the way to index 0. The recursion handles this, at a cost proportional to (n/2)² = 16 for four elements.`,
     codeLine: 1,
+    vars: splitVars(mid, leftOrig, rightOrig, null, []),
   })
 
   steps.push({
     state: blank('sorted-left', { leftHalf: sortedLeft, rightHalf: rightOrig, leftSorted: true }),
     description: `Left half sorted: [${sortedLeft.join(', ')}]. Maximum = ${sortedLeft[sortedLeft.length - 1]}. The recursion correctly placed every value relative to its neighbours — but only within this four-element window. Now sort the right half.`,
     codeLine: 1,
+    vars: splitVars(mid, sortedLeft, rightOrig, null, ['left']),
   })
 
   // Walk through sorting the right half
@@ -451,12 +414,14 @@ function naiveSplitSteps(): Step<NaiveSplitState>[] {
     state: blank('sorted-right', { leftHalf: sortedLeft, rightHalf: rightOrig, leftSorted: true, rightSorted: false }),
     description: `Sorting right half [${rightOrig.join(', ')}] recursively. 5 is the minimum here — it must reach index 0 of the right window. Again proportional cost of (n/2)².`,
     codeLine: 2,
+    vars: splitVars(mid, sortedLeft, rightOrig, null, []),
   })
 
   steps.push({
     state: blank('sorted-right', { leftHalf: sortedLeft, rightHalf: sortedRight, leftSorted: true, rightSorted: true }),
     description: `Right half sorted: [${sortedRight.join(', ')}]. Minimum = ${sortedRight[0]}. Both halves are now in perfect order within their own windows. The question is: where does ${sortedRight[0]} belong in the FULL array?`,
     codeLine: 2,
+    vars: splitVars(mid, sortedLeft, sortedRight, null, ['right']),
   })
 
   // Concatenate
@@ -464,6 +429,7 @@ function naiveSplitSteps(): Step<NaiveSplitState>[] {
     state: blank('concat', { leftHalf: sortedLeft, rightHalf: sortedRight, combined, leftSorted: true, rightSorted: true }),
     description: `Concatenate left ++ right: [${sortedLeft.join(', ')}] followed by [${sortedRight.join(', ')}] = [${combined.join(', ')}]. Gluing end-to-end costs nothing — but look at the junction between the two halves.`,
     codeLine: 3,
+    vars: splitVars(mid, sortedLeft, sortedRight, combined, ['answer']),
   })
 
   // Verdict — highlight the seam
@@ -478,6 +444,7 @@ function naiveSplitSteps(): Step<NaiveSplitState>[] {
     }),
     description: `Result: [${combined.join(', ')}] — WRONG. ${sortedLeft[sortedLeft.length - 1]} ends the left half; ${sortedRight[0]} starts the right half: ${sortedLeft[sortedLeft.length - 1]} > ${sortedRight[0]}. The sorting was locally correct but globally blind: ${sortedRight[0]}, ${sortedRight[1]}, and ${sortedRight[2]} all belong among the left half's values. Concatenation throws away the global ordering — the seam is broken.`,
     codeLine: 3,
+    vars: splitVars(mid, sortedLeft, sortedRight, combined, []),
   })
 
   return steps

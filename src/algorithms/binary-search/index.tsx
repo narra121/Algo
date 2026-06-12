@@ -1,4 +1,4 @@
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
 import { naiveDemo, hashDemo, jumpDemo } from './demos'
 import { ARR, TARGET } from './data'
 
@@ -36,31 +36,56 @@ function generateSteps(): Step<BSState>[] {
     history: [...history],
   })
 
+  /** Last mid the algorithm computed — the variable keeps its value between probes. */
+  let curMid: number | null = null
+
+  const mkVars = (changed: string[] = []): VarEntry[] => {
+    const c = (n: string) => (changed.includes(n) ? { changed: true } : {})
+    return [
+      { name: 'lo', value: String(lo), ...c('lo') },
+      { name: 'hi', value: String(hi), ...c('hi') },
+      { name: 'mid', value: curMid === null ? '—' : String(curMid), ...c('mid') },
+      { name: 'a[mid]', value: curMid === null ? '—' : String(ARR[curMid]), ...c('a[mid]') },
+      { name: 'target', value: String(TARGET), ...c('target') },
+    ]
+  }
+
   steps.push({
     state: snap(null, null, null),
     description: `The array is SORTED — that one fact is the superpower. We're hunting for ${TARGET} among ${ARR.length} values, and sortedness means one comparison can condemn an entire half.`,
     codeLine: 0,
+    vars: [
+      { name: 'lo', value: '—' },
+      { name: 'hi', value: '—' },
+      { name: 'mid', value: '—' },
+      { name: 'a[mid]', value: '—' },
+      { name: 'target', value: String(TARGET), changed: true },
+    ],
   })
   steps.push({
     state: snap(null, null, null),
     description: `Place LO at index 0 (value ${ARR[0]}) and HI at index ${ARR.length - 1} (value ${ARR[ARR.length - 1]}). The invariant: if ${TARGET} exists at all, it lives somewhere in [LO, HI]. Everything outside is provably wrong.`,
     codeLine: 0,
+    vars: mkVars(['lo', 'hi']),
   })
   steps.push({
     state: snap(null, null, null),
     description: `${ARR.length} candidates remain. A linear scan might need ${ARR.length} looks; halving needs at most ⌈log₂ ${ARR.length}⌉ = ${Math.ceil(Math.log2(ARR.length))} probes. Let the questioning begin.`,
     codeLine: 1,
+    vars: mkVars(),
   })
 
   while (lo <= hi) {
     const mid = (lo + hi) >> 1
     const v = ARR[mid]
     probes++
+    curMid = mid
 
     steps.push({
       state: snap(mid, null, null),
       description: `mid = ⌊(${lo} + ${hi}) / 2⌋ = ${mid}. Probe the exact middle of what's left: a[${mid}] = ${v}. One number is about to answer for ${hi - lo + 1} candidates.`,
       codeLine: 2,
+      vars: mkVars(['mid', 'a[mid]']),
     })
 
     if (v === TARGET) {
@@ -69,11 +94,13 @@ function generateSteps(): Step<BSState>[] {
         state: snap(mid, 'equal', null),
         description: `${v} vs ${TARGET} — an exact match! The probe landed directly on the target.`,
         codeLine: 3,
+        vars: mkVars(),
       })
       steps.push({
         state: snap(mid, 'equal', mid),
         description: `Return index ${mid}. Found in just ${probes} probes instead of up to ${ARR.length} linear looks — every question erased half the world.`,
         codeLine: 3,
+        vars: mkVars(),
       })
       break
     }
@@ -83,6 +110,7 @@ function generateSteps(): Step<BSState>[] {
         state: snap(mid, 'less', null),
         description: `${v} < ${TARGET}. Because the array is sorted, every value at index ≤ ${mid} is at most ${v} — all of them are too small. The entire left half is guilty by association.`,
         codeLine: 4,
+        vars: mkVars(),
       })
       lo = mid + 1
       history = [...history, hi - lo + 1]
@@ -90,12 +118,14 @@ function generateSteps(): Step<BSState>[] {
         state: snap(null, null, null),
         description: `Discard everything up through index ${mid} forever and jump LO to ${lo}. One comparison, half the candidates gone — search space: ${history.join(' → ')}.`,
         codeLine: 4,
+        vars: mkVars(['lo']),
       })
     } else {
       steps.push({
         state: snap(mid, 'greater', null),
         description: `${v} > ${TARGET}. Sortedness cuts the other way too: every value at index ≥ ${mid} is at least ${v} — all too big. The right half can never hold ${TARGET}.`,
         codeLine: 5,
+        vars: mkVars(),
       })
       hi = mid - 1
       history = [...history, hi - lo + 1]
@@ -103,6 +133,7 @@ function generateSteps(): Step<BSState>[] {
         state: snap(null, null, null),
         description: `Discard indices ${mid}…${ARR.length - 1} forever and pull HI down to ${hi}. Search space: ${history.join(' → ')}.`,
         codeLine: 5,
+        vars: mkVars(['hi']),
       })
     }
 
@@ -110,6 +141,7 @@ function generateSteps(): Step<BSState>[] {
       state: snap(null, null, null),
       description: `LO ≤ HI still holds, so ${hi - lo + 1} candidate${hi - lo + 1 === 1 ? '' : 's'} remain between a[${lo}] = ${ARR[lo]} and a[${hi}] = ${ARR[hi]}. Ask the same question of the new, smaller world.`,
       codeLine: 1,
+      vars: mkVars(),
     })
   }
 
@@ -117,6 +149,7 @@ function generateSteps(): Step<BSState>[] {
     state: snap(null, foundAt !== null ? 'equal' : null, foundAt),
     description: `Recap: ${probes} probes did what a linear scan needs up to ${ARR.length} looks for — the search space shrank ${history.join(' → ')} → found at index ${foundAt}. Doubling the array to ${ARR.length * 2} elements would cost just ONE more probe — that is what O(log n) feels like.`,
     codeLine: -1,
+    vars: mkVars(),
   })
   return steps
 }

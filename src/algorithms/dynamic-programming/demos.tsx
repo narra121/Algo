@@ -1,9 +1,11 @@
-import type { AttemptDemo, Step } from '../../core/types'
+import type { AttemptDemo, Step, VarEntry } from '../../core/types'
 import { Cells, Legend, VizCaption } from '../../components/vizPrimitives'
 import { VALUES } from './data'
 
+const fmtSet = (s: number[]) => (s.length ? `[${s.join(', ')}]` : '∅')
+
 /* ─────────────────────────────────────────────────────────────────────────────
-   Demo 1: Brute force — enumerate every valid (non-adjacent) subset
+   Demo 1: Brute force — enumerate every rob/skip mask, all 128 of them
    pseudocode index matches problem.naive.pseudocode:
      0: 'best ← 0'
      1: 'for each subset S of the n houses:'
@@ -11,14 +13,14 @@ import { VALUES } from './data'
      3: '        best ← max(best, sum of cash in S)'
      4: 'return best'
 
-   Honest simulation: 2^7 = 128 masks; 34 pass the adjacency check.
-   We show 10 concrete evaluations, then a truncation step, then the verdict.
+   Honest simulation: all 2^7 = 128 masks are examined one per step;
+   34 pass the adjacency check, best = 19 at houses [0, 2, 5].
 ───────────────────────────────────────────────────────────────────────────── */
 
 interface SubsetState {
-  /** Which house indices are in the current subset (-1 means intro). */
+  /** Which house indices are in the current subset. */
   subset: number[]
-  /** Sum of the current subset (null = intro). */
+  /** Sum of the current subset (null = intro / not computed for illegal masks). */
   subsetSum: number | null
   /** Best haul seen so far. */
   best: number
@@ -26,92 +28,115 @@ interface SubsetState {
   bestSubset: number[]
   /** How many valid subsets evaluated so far. */
   validCount: number
-  /** Total subsets examined (2^n when done). */
+  /** Total masks examined so far (128 when done). */
   totalExamined: number
-  phase: 'intro' | 'eval' | 'truncate' | 'verdict'
+  /** Did the current mask pass the adjacency check? (null = intro/verdict) */
+  valid: boolean | null
+  phase: 'intro' | 'eval' | 'verdict'
 }
 
 function subsetSteps(): Step<SubsetState>[] {
   const steps: Step<SubsetState>[] = []
   const n = VALUES.length // 7
 
-  // Compute honest totals by running the full enumeration
-  let allValid: { subset: number[]; total: number }[] = []
-  for (let mask = 0; mask < (1 << n); mask++) {
-    let valid = true
-    for (let i = 0; i < n - 1; i++) {
-      if ((mask >> i) & 1 && (mask >> (i + 1)) & 1) { valid = false; break }
-    }
-    if (!valid) continue
-    let total = 0
-    const subset: number[] = []
-    for (let i = 0; i < n; i++) { if ((mask >> i) & 1) { total += VALUES[i]; subset.push(i) } }
-    allValid.push({ subset, total })
-  }
-  // allValid.length === 34; best is 19 at [0,2,5]
+  const mkVars = (
+    mask: string,
+    S: string,
+    sum: string,
+    valid: string,
+    best: number,
+    bestSubset: number[],
+    ch: { mask?: boolean; S?: boolean; sum?: boolean; valid?: boolean; best?: boolean } = {},
+  ): VarEntry[] => [
+    { name: 'mask', value: mask, ...(ch.mask ? { changed: true } : {}) },
+    { name: 'S', value: S, ...(ch.S ? { changed: true } : {}) },
+    { name: 'sum(S)', value: sum, ...(ch.sum ? { changed: true } : {}) },
+    { name: 'valid?', value: valid, ...(ch.valid ? { changed: true } : {}) },
+    { name: 'best', value: String(best), ...(ch.best ? { changed: true } : {}) },
+    { name: 'bestSubset', value: fmtSet(bestSubset), ...(ch.best ? { changed: true } : {}) },
+  ]
 
   // Intro sentinel
   steps.push({
-    state: { subset: [], subsetSum: null, best: 0, bestSubset: [], validCount: 0, totalExamined: 0, phase: 'intro' },
-    description: `Brute force: try all 2^${n} = ${1 << n} rob/skip subsets of the 7 houses. Discard any subset where two adjacent houses are both robbed. Keep the highest-total subset that survives.`,
+    state: { subset: [], subsetSum: null, best: 0, bestSubset: [], validCount: 0, totalExamined: 0, valid: null, phase: 'intro' },
+    description: `Brute force: try all 2^${n} = ${1 << n} rob/skip subsets of the 7 houses. Discard any subset where two adjacent houses are both robbed. Keep the highest-total subset that survives. Start with best = 0.`,
     codeLine: 0,
+    vars: mkVars('—', '—', '—', '—', 0, [], { best: true }),
   })
 
-  // Show the first 10 valid subsets concretely
+  // Examine every one of the 128 masks, one honest step each
   let best = 0
   let bestSubset: number[] = []
-  const SHOW = 10
-  for (let k = 0; k < SHOW; k++) {
-    const { subset, total } = allValid[k]
+  let validCount = 0
+  for (let mask = 0; mask < 1 << n; mask++) {
+    const subset: number[] = []
+    for (let i = 0; i < n; i++) if ((mask >> i) & 1) subset.push(i)
+    let badPair = -1
+    for (let i = 0; i < n - 1; i++) {
+      if ((mask >> i) & 1 && (mask >> (i + 1)) & 1) { badPair = i; break }
+    }
+    const valid = badPair === -1
+
+    if (!valid) {
+      steps.push({
+        state: { subset, subsetSum: null, best, bestSubset: [...bestSubset], validCount, totalExamined: mask + 1, valid: false, phase: 'eval' },
+        description: `Mask ${mask} would rob houses ${fmtSet(subset)} — but houses ${badPair} and ${badPair + 1} are next-door neighbors (worth ${VALUES[badPair]} and ${VALUES[badPair + 1]}), so this plan trips the alarm. Illegal; discarded before summing. Best stays ${best}.`,
+        codeLine: 2,
+        vars: mkVars(String(mask), fmtSet(subset), '—', `no — houses ${badPair},${badPair + 1} adjacent`, best, bestSubset, { mask: true, S: true, sum: true, valid: true }),
+      })
+      continue
+    }
+
+    validCount++
+    const total = subset.reduce((s, i) => s + VALUES[i], 0)
     const prevBest = best
-    if (total > best) { best = total; bestSubset = [...subset] }
-    const houseList = subset.length === 0 ? 'empty set (rob nothing)' : `houses [${subset.join(', ')}] → values [${subset.map(i => VALUES[i]).join(', ')}]`
-    const improved = total > prevBest
+    const improved = total > best
+    if (improved) { best = total; bestSubset = [...subset] }
+
+    const houseList = subset.length === 0
+      ? 'the empty set — rob nothing'
+      : `houses ${fmtSet(subset)} → values [${subset.map(i => VALUES[i]).join(', ')}]`
     steps.push({
-      state: { subset, subsetSum: total, best, bestSubset: [...bestSubset], validCount: k + 1, totalExamined: k + 1, phase: 'eval' },
-      description: `Subset ${k + 1}: ${houseList} — total ${total}.${improved ? ` New best: ${total}.` : ` Best stays ${best}.`} (${34 - k - 1} valid subsets still to check.)`,
-      codeLine: total > 0 ? 3 : 2,
+      state: { subset, subsetSum: total, best, bestSubset: [...bestSubset], validCount, totalExamined: mask + 1, valid: true, phase: 'eval' },
+      description: improved
+        ? `Mask ${mask}: ${houseList}, total ${total}. No two picks touch, so it is legal — and ${total} beats the old best ${prevBest}. New best: ${total} from houses ${fmtSet(bestSubset)}. (Valid subset #${validCount}.)`
+        : `Mask ${mask}: ${houseList}, total ${total}. Legal — no two picks are adjacent — but ${total} ≤ best ${best}${bestSubset.length ? ` (held by houses ${fmtSet(bestSubset)})` : ''}, so best stays ${best}. (Valid subset #${validCount}.)`,
+      codeLine: 3,
+      vars: mkVars(String(mask), fmtSet(subset), String(total), 'yes', best, bestSubset, { mask: true, S: true, sum: true, valid: true, ...(improved ? { best: true } : {}) }),
     })
   }
 
-  // Truncation step: skip the remaining 24 valid subsets
+  // Verdict — after every one of the 128 masks was actually examined
   steps.push({
-    state: { subset: [], subsetSum: null, best, bestSubset: [...bestSubset], validCount: 34, totalExamined: 128, phase: 'truncate' },
-    description: `Skipping subsets 11–34: the remaining 24 valid subsets produce totals ≤ ${best}. All 128 masks examined in full. Best so far: ${best} from houses [${bestSubset.join(', ')}].`,
-    codeLine: 1,
-  })
-
-  // Verdict
-  steps.push({
-    state: { subset: [0, 2, 5], subsetSum: 19, best: 19, bestSubset: [0, 2, 5], validCount: 34, totalExamined: 128, phase: 'verdict' },
-    description: `Answer: rob houses 0, 2, 5 → values [${[0, 2, 5].map(i => VALUES[i]).join(', ')}] = ${19}. Found by exhausting all 128 subsets (34 valid ones). A 40-house street has over a trillion subsets — 2^40 > 1,000,000,000,000.`,
+    state: { subset: [...bestSubset], subsetSum: best, best, bestSubset: [...bestSubset], validCount, totalExamined: 1 << n, valid: null, phase: 'verdict' },
+    description: `Answer: rob houses ${fmtSet(bestSubset)} → values [${bestSubset.map(i => VALUES[i]).join(', ')}] = ${best}. All ${1 << n} masks were examined; ${validCount} survived the adjacency check and none beat ${best}. A 40-house street has over a trillion subsets — 2^40 > 1,000,000,000,000.`,
     codeLine: 4,
+    vars: mkVars(`128 of 128 done`, fmtSet(bestSubset), String(best), 'yes', best, bestSubset),
   })
 
   return steps
 }
 
 function SubsetViz({ step }: { step: Step<SubsetState> }) {
-  const { subset, best, bestSubset, validCount, totalExamined, phase } = step.state
+  const { subset, best, bestSubset, validCount, totalExamined, valid, phase } = step.state
   return (
     <>
       <VizCaption>
         {phase === 'intro' && `brute force: all 2^7 = 128 subsets · best so far = 0`}
-        {phase === 'eval' && `valid subset #${validCount} · best so far = ${best}`}
-        {phase === 'truncate' && `all 128 examined · 34 valid · best = ${best}`}
-        {phase === 'verdict' && `answer = ${best} · houses [${bestSubset.join(', ')}]`}
+        {phase === 'eval' && `mask ${totalExamined} of 128 · ${validCount} valid so far · best = ${best}`}
+        {phase === 'verdict' && `answer = ${best} · houses ${fmtSet(bestSubset)}`}
       </VizCaption>
       <VizCaption>current subset</VizCaption>
       <Cells
         values={VALUES}
         classFor={k => {
           if (phase === 'verdict') return bestSubset.includes(k) ? 'done' : 'dim'
-          if (phase === 'truncate') return bestSubset.includes(k) ? 'done' : 'dim'
           if (phase === 'intro') return ''
-          return subset.includes(k) ? 'active' : 'dim'
+          if (subset.includes(k)) return valid === false ? 'rose' : 'active'
+          return 'dim'
         }}
         pointerFor={k => {
-          if (phase === 'eval' && subset.includes(k)) return { label: 'rob', tone: 'mint' }
+          if (phase === 'eval' && subset.includes(k)) return { label: 'rob', tone: valid === false ? 'rose' : 'mint' }
           if (phase === 'verdict' && bestSubset.includes(k)) return { label: 'rob', tone: 'amber' }
           return null
         }}
@@ -125,6 +150,7 @@ function SubsetViz({ step }: { step: Step<SubsetState> }) {
       <Legend
         items={[
           { tone: 'mint', label: 'in current subset' },
+          { tone: 'rose', label: 'illegal — adjacent picks' },
           { tone: 'amber', label: 'best subset' },
           { label: 'settled best' },
         ]}
@@ -166,11 +192,25 @@ function greedySteps(): Step<GreedyState>[] {
   const evenSum = evenIdx.reduce((s, i) => s + VALUES[i], 0) // 2+9+1+4 = 16
   const oddSum = oddIdx.reduce((s, i) => s + VALUES[i], 0)   // 7+3+8 = 18
 
+  const mkVars = (
+    house: string,
+    evens: string,
+    odds: string,
+    answer: string,
+    ch: { house?: boolean; evens?: boolean; odds?: boolean; answer?: boolean } = {},
+  ): VarEntry[] => [
+    { name: 'house', value: house, ...(ch.house ? { changed: true } : {}) },
+    { name: 'evens', value: evens, ...(ch.evens ? { changed: true } : {}) },
+    { name: 'odds', value: odds, ...(ch.odds ? { changed: true } : {}) },
+    { name: 'max(evens, odds)', value: answer, ...(ch.answer ? { changed: true } : {}) },
+  ]
+
   // Intro
   steps.push({
     state: { phase: 'intro', evenIndices: [], oddIndices: [], evenSum: 0, oddSum: 0, highlight: 'neither' },
     description: `Greedy: "no two adjacent" sounds like strict alternation — rob every other house. Two possible patterns: even-indexed houses (0, 2, 4, 6) or odd-indexed (1, 3, 5). Take the bigger total.`,
     codeLine: 0,
+    vars: mkVars('—', '—', '—', '—'),
   })
 
   // Even pass — build sum step by step, show 4 additions
@@ -180,8 +220,9 @@ function greedySteps(): Step<GreedyState>[] {
     runningEven += VALUES[i]
     steps.push({
       state: { phase: 'evens', evenIndices: evenIdx.slice(0, k + 1), oddIndices: [], evenSum: runningEven, oddSum: 0, highlight: 'even' },
-      description: `Even pattern: add house ${i} (${VALUES[i]}). Running even total: ${runningEven}.`,
+      description: `Even pattern: add house ${i} (${VALUES[i]})${k > 0 ? ` to the running ${runningEven - VALUES[i]}` : ''}. Running even total: ${runningEven}.`,
       codeLine: 0,
+      vars: mkVars(String(i), String(runningEven), '—', '—', { house: true, evens: true }),
     })
   }
 
@@ -192,8 +233,9 @@ function greedySteps(): Step<GreedyState>[] {
     runningOdd += VALUES[i]
     steps.push({
       state: { phase: 'odds', evenIndices: evenIdx, oddIndices: oddIdx.slice(0, k + 1), evenSum: evenSum, oddSum: runningOdd, highlight: 'odd' },
-      description: `Odd pattern: add house ${i} (${VALUES[i]}). Running odd total: ${runningOdd}.`,
+      description: `Odd pattern: add house ${i} (${VALUES[i]})${k > 0 ? ` to the running ${runningOdd - VALUES[i]}` : ''}. Running odd total: ${runningOdd}.`,
       codeLine: 1,
+      vars: mkVars(String(i), String(evenSum), String(runningOdd), '—', { house: true, odds: true }),
     })
   }
 
@@ -202,13 +244,15 @@ function greedySteps(): Step<GreedyState>[] {
     state: { phase: 'compare', evenIndices: evenIdx, oddIndices: oddIdx, evenSum, oddSum, highlight: 'neither' },
     description: `Compare: even total = ${evenSum}, odd total = ${oddSum}. Greedy picks the odd pattern: ${oddSum}. But the true optimum is 19 — houses 0, 2, 5, which rob both 9 (even) and 8 (odd). Strict alternation can never span both patterns.`,
     codeLine: 2,
+    vars: mkVars('—', String(evenSum), String(oddSum), String(Math.max(evenSum, oddSum)), { answer: true }),
   })
 
   // Verdict — show the winning houses 0,2,5 vs greedy's 1,3,5
   steps.push({
     state: { phase: 'verdict', evenIndices: [0, 2, 5], oddIndices: oddIdx, evenSum: 19, oddSum, highlight: 'neither' },
-    description: `FAIL. Greedy returns ${oddSum}; the answer is 19 (houses 0, 2, 5 → ${VALUES[0]} + ${VALUES[2]} + ${VALUES[5]}). The winning plan skips TWO houses in a row (houses 3 and 4, worth 3 and 1) to grab both 9 and 8 — a non-alternating rhythm no greedy can produce.`,
+    description: `FAIL. Greedy returns ${oddSum}; the answer is 19 (houses 0, 2, 5 → ${VALUES[0]} + ${VALUES[2]} + ${VALUES[5]}). The winning plan passes over TWO houses in a row (houses 3 and 4, worth 3 and 1) to grab both 9 and 8 — a non-alternating rhythm no greedy can produce.`,
     codeLine: -1,
+    vars: mkVars('—', String(evenSum), String(oddSum), String(Math.max(evenSum, oddSum))),
   })
 
   return steps
@@ -275,7 +319,7 @@ export const greedyDemo: AttemptDemo<GreedyState> = { generateSteps: greedySteps
      3: '    return max(best(i − 1),'
      4: '               value[i] + best(i − 2))'
 
-   Honest: 25 total calls; per-index counts [5,8,5,3,2,1,1].
+   Honest: all 25 calls shown, one step each; per-index counts [5,8,5,3,2,1,1].
    best(1) called 8 times, best(2) called 5 times.
 ───────────────────────────────────────────────────────────────────────────── */
 
@@ -293,7 +337,7 @@ function recursionSteps(): Step<RecursionState>[] {
   const steps: Step<RecursionState>[] = []
   const n = VALUES.length
 
-  // Run the full recursion and record call log
+  // Run the full recursion once and record the call log (25 entries)
   const callLog: number[] = []
   function best(i: number): number {
     callLog.push(i)
@@ -302,7 +346,13 @@ function recursionSteps(): Step<RecursionState>[] {
     return Math.max(best(i - 1), VALUES[i] + best(i - 2))
   }
   const answer = best(n - 1)
-  // callLog.length === 25
+  const totalCallCount = callLog.length // 25 — frozen here; never call best() again
+
+  // What each best(i) resolves to, computed without touching the call log
+  const val: number[] = new Array(n)
+  val[0] = VALUES[0]
+  val[1] = Math.max(VALUES[0], VALUES[1])
+  for (let i = 2; i < n; i++) val[i] = Math.max(val[i - 1], VALUES[i] + val[i - 2])
 
   // Compute running callCounts after each call
   const snapshots: number[][] = []
@@ -311,44 +361,61 @@ function recursionSteps(): Step<RecursionState>[] {
     running[idx]++
     snapshots.push([...running])
   }
-  // Honest per-index final: [5,8,5,3,2,1,1]; total: 25; dupes: 18
+  const finalCounts = snapshots[totalCallCount - 1] // [5,8,5,3,2,1,1]
+
+  const mkVars = (
+    i: string,
+    valueI: string,
+    bestI: string,
+    callsToI: string,
+    total: number,
+    ch: { call?: boolean; total?: boolean } = {},
+  ): VarEntry[] => [
+    { name: 'i', value: i, ...(ch.call ? { changed: true } : {}) },
+    { name: 'value[i]', value: valueI, ...(ch.call ? { changed: true } : {}) },
+    { name: 'best(i)', value: bestI, ...(ch.call ? { changed: true } : {}) },
+    { name: 'calls to best(i)', value: callsToI, ...(ch.call ? { changed: true } : {}) },
+    { name: 'total calls', value: String(total), ...(ch.total ? { changed: true } : {}) },
+  ]
 
   // Intro
   steps.push({
     state: { callCounts: new Array(n).fill(0), currentI: -1, totalCalls: 0, phase: 'intro' },
     description: `Recursive approach: best(i) = max(best(i−1), value[i] + best(i−2)). To price house 6 we call best(5) and best(4). Each of those calls two more. The call tree fans out — but how many unique questions exist?`,
     codeLine: 0,
+    vars: mkVars('—', '—', '—', '—', 0, { total: true }),
   })
 
-  // Show the first 15 calls (enough to see the pattern of repeats)
-  const SHOW_CALLS = 15
-  for (let k = 0; k < Math.min(SHOW_CALLS, callLog.length); k++) {
+  // Show every one of the 25 calls, one honest step each
+  for (let k = 0; k < totalCallCount; k++) {
     const i = callLog[k]
     const counts = snapshots[k]
     const callNum = k + 1
     const isRepeat = counts[i] > 1
+    let description: string
+    if (isRepeat) {
+      description = `Call #${callNum}: best(${i}) AGAIN — visit #${counts[i]} to this same subproblem. ${i <= 1 ? 'Even the base case gets re-asked: it' : 'Nothing was written down, so the whole subtree below it is re-grown; it'} dutifully returns the identical ${val[i]}. Wasted work.`
+    } else if (i === 0) {
+      description = `Call #${callNum}: best(0) — first visit. Base case: the street is just house 0, so return value[0] = ${VALUES[0]} immediately.`
+    } else if (i === 1) {
+      description = `Call #${callNum}: best(1) — first visit. Base case: houses 0 and 1 are neighbors, so return max(${VALUES[0]}, ${VALUES[1]}) = ${val[1]} immediately.`
+    } else {
+      description = `Call #${callNum}: best(${i}) — first visit. To price houses 0…${i} it must ask best(${i - 1}) (skip house ${i}) and best(${i - 2}) (rob its ${VALUES[i]}); the branches will resolve to max(${val[i - 1]}, ${VALUES[i]} + ${val[i - 2]}) = ${val[i]}.`
+    }
     steps.push({
       state: { callCounts: counts, currentI: i, totalCalls: callNum, phase: 'call' },
-      description: isRepeat
-        ? `Call #${callNum}: best(${i}) — this is call #${counts[i]} to best(${i}). Same subproblem, same answer (${best(i)}), recomputed from scratch. Wasted work.`
-        : `Call #${callNum}: best(${i}) — first time computing best(${i}).`,
+      description,
       codeLine: i === 0 ? 1 : i === 1 ? 2 : 3,
+      vars: mkVars(String(i), String(VALUES[i]), String(val[i]), `${counts[i]}${isRepeat ? ' (repeat!)' : ' (first)'}`, callNum, { call: true, total: true }),
     })
   }
 
-  // Truncation: remaining calls are all repeats
-  const remaining = callLog.length - SHOW_CALLS
+  // Verdict — after every call was actually shown
   steps.push({
-    state: { callCounts: snapshots[callLog.length - 1], currentI: -1, totalCalls: callLog.length, phase: 'call' },
-    description: `${remaining} more calls (all duplicates) finish the tree. Running total: ${callLog.length} calls to answer only ${n} distinct questions. best(1) answered ${snapshots[callLog.length - 1][1]} times, best(2) answered ${snapshots[callLog.length - 1][2]} times.`,
-    codeLine: 3,
-  })
-
-  // Verdict
-  steps.push({
-    state: { callCounts: snapshots[callLog.length - 1], currentI: -1, totalCalls: callLog.length, phase: 'verdict' },
-    description: `Answer: ${answer}. Correct — but 25 calls answered only 7 distinct questions, wasting ${callLog.length - n} duplicate calls. At 40 houses the call count tracks Fibonacci growth: roughly 331 million calls for 40 distinct answers.`,
+    state: { callCounts: finalCounts, currentI: -1, totalCalls: totalCallCount, phase: 'verdict' },
+    description: `Answer: best(${n - 1}) = ${answer}. Correct — but ${totalCallCount} calls answered only ${n} distinct questions, wasting ${totalCallCount - n} duplicate calls: best(1) was answered ${finalCounts[1]} times and best(2) ${finalCounts[2]} times. At 40 houses the call count tracks Fibonacci growth — roughly 331 million calls for 40 distinct answers.`,
     codeLine: -1,
+    vars: mkVars('—', '—', `${answer} (= best(${n - 1}))`, '—', totalCallCount),
   })
 
   return steps
@@ -356,7 +423,6 @@ function recursionSteps(): Step<RecursionState>[] {
 
 function RecursionViz({ step }: { step: Step<RecursionState> }) {
   const { callCounts, currentI, totalCalls, phase } = step.state
-  const maxCount = Math.max(...callCounts, 1)
   return (
     <>
       <VizCaption>
@@ -407,7 +473,7 @@ export const recursionDemo: AttemptDemo<RecursionState> = { generateSteps: recur
      4: '    memo[i] ← max(best(i − 1), value[i] + best(i − 2))'
      5: '    return memo[i]'
 
-   Honest: 7 misses, 4 hits, 11 total calls.
+   Honest: 7 misses, 4 hits, 11 total calls — all shown.
 ───────────────────────────────────────────────────────────────────────────── */
 
 interface MemoState {
@@ -425,6 +491,22 @@ interface MemoState {
 function memoSteps(): Step<MemoState>[] {
   const steps: Step<MemoState>[] = []
   const n = VALUES.length
+
+  const fmtMemo = (a: (number | null)[]) => `[${a.map(v => (v === null ? '—' : v)).join(', ')}]`
+  const mkVars = (
+    i: string,
+    memoArr: (number | null)[],
+    memoI: string,
+    hits: number,
+    misses: number,
+    ch: { i?: boolean; memo?: boolean; memoI?: boolean; hits?: boolean; misses?: boolean } = {},
+  ): VarEntry[] => [
+    { name: 'i', value: i, ...(ch.i ? { changed: true } : {}) },
+    { name: 'memo[]', value: fmtMemo(memoArr), ...(ch.memo ? { changed: true } : {}) },
+    { name: 'memo[i]', value: memoI, ...(ch.memoI ? { changed: true } : {}) },
+    { name: 'hits', value: String(hits), ...(ch.hits ? { changed: true } : {}) },
+    { name: 'misses', value: String(misses), ...(ch.misses ? { changed: true } : {}) },
+  ]
 
   // Run the memoized recursion and record events
   const events: { i: number; hit: boolean; memoAfter: (number | null)[] }[] = []
@@ -459,6 +541,7 @@ function memoSteps(): Step<MemoState>[] {
     state: { memo: new Array(n).fill(null), currentI: -1, isHit: null, hits: 0, misses: 0, phase: 'intro' },
     description: `Memoize: before computing best(i), check if the answer is already cached. If yes, return it instantly. Same recursion — but each subproblem is computed at most once. Memo table starts empty.`,
     codeLine: 0,
+    vars: mkVars('—', new Array(n).fill(null), '—', 0, 0, { memo: true }),
   })
 
   // Show all 11 events
@@ -467,20 +550,35 @@ function memoSteps(): Step<MemoState>[] {
     const { i, hit, memoAfter } = events[k]
     if (hit) hits++; else misses++
     const val = memoAfter[i]
+    let description: string
+    if (hit) {
+      description = `best(${i}): memo[${i}] already holds ${val} — CACHE HIT. Return ${val} instantly, zero recursion below this call. (Hit #${hits})`
+    } else if (i === 0) {
+      description = `best(0): memo[0] was empty — base case, store memo[0] ← value[0] = ${val}. (Miss #${misses})`
+    } else if (i === 1) {
+      description = `best(1): memo[1] was empty — base case, store memo[1] ← max(${VALUES[0]}, ${VALUES[1]}) = ${val}. (Miss #${misses})`
+    } else {
+      description = `best(${i}): memo[${i}] was empty — its recursion just resolved best(${i - 1}) = ${memoAfter[i - 1]} and best(${i - 2}) = ${memoAfter[i - 2]}, so store memo[${i}] ← max(${memoAfter[i - 1]}, ${VALUES[i]} + ${memoAfter[i - 2]}) = ${val}. (Miss #${misses})`
+    }
     steps.push({
       state: { memo: memoAfter, currentI: i, isHit: hit, hits, misses, phase: 'call' },
-      description: hit
-        ? `best(${i}): memo[${i}] = ${val} — CACHE HIT. Return ${val} instantly, zero recursion. (Hit #${hits})`
-        : `best(${i}): memo[${i}] was empty — compute and store ${val}. (Miss #${misses})`,
+      description,
       codeLine: hit ? 2 : i <= 1 ? 3 : 4,
+      vars: mkVars(String(i), memoAfter, String(val), hits, misses, {
+        i: true,
+        memoI: true,
+        ...(hit ? { hits: true } : { memo: true, misses: true }),
+      }),
     })
   }
 
   // Verdict
+  const finalMemo = events[events.length - 1].memoAfter
   steps.push({
-    state: { memo: events[events.length - 1].memoAfter, currentI: -1, isHit: null, hits: totalHits, misses: totalMisses, phase: 'verdict' },
+    state: { memo: finalMemo, currentI: -1, isHit: null, hits: totalHits, misses: totalMisses, phase: 'verdict' },
     description: `Answer: ${answer}. ${totalMisses} real computations + ${totalHits} cache hits = ${totalHits + totalMisses} total calls (vs 25 for naive recursion). Linear work — but the stack still dives ${n} frames deep. On a 100,000-house street that depth blows the call stack. And the fill order was always 0, 1, 2, 3, 4, 5, 6 — left to right, no recursion needed.`,
     codeLine: -1,
+    vars: mkVars('—', finalMemo, String(answer), totalHits, totalMisses),
   })
 
   return steps

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import type { AlgorithmModule, Step } from '../../core/types'
+import type { AlgorithmModule, Step, VarEntry } from '../../core/types'
 import { naiveDemo, rowRuleDemo, greedyDemo } from './demos'
 
 /* Canonical example: N-Queens on a 4×4 board — place 4 queens so none attack each other. */
@@ -45,10 +45,30 @@ function generateSteps(): Step<NQState>[] {
     ...over,
   })
 
+  /* Live variables panel: same four names on every step, matching the pseudocode. */
+  let prevVars: VarEntry[] | null = null
+  const fmtQueens = () =>
+    queens.length === 0 ? '[]' : `[${queens.map((c, r) => `r${r}c${c}`).join(', ')}]`
+  const mkVars = (row: number | string, col: number | string): VarEntry[] => {
+    const raw = [
+      { name: 'row', value: String(row) },
+      { name: 'col', value: String(col) },
+      { name: 'queens', value: fmtQueens() },
+      { name: 'conflicts checked', value: String(squaresTried) },
+    ]
+    const out = raw.map((v) => ({
+      ...v,
+      changed: prevVars !== null && prevVars.find((p) => p.name === v.name)!.value !== v.value,
+    }))
+    prevVars = out
+    return out
+  }
+
   steps.push({
     state: snap({ caption: 'row 0 · columns 0–3 open' }),
     description: `Goal: place ${N} queens on a ${N}×${N} board so no two share a column or diagonal. Each row gets exactly one queen, so we solve row by row — starting the search at row 0.`,
     codeLine: 0,
+    vars: mkVars(0, '—'),
   })
 
   function solve(row: number): boolean {
@@ -57,6 +77,7 @@ function generateSteps(): Step<NQState>[] {
         state: snap({ solved: true, caption: `solved · queen columns = [${queens.join(', ')}]` }),
         description: `Row ${N} reached — all ${N} queens stand at columns ${queens.join(', ')} with zero conflicts. The whole search touched just ${squaresTried} squares and undid only ${undos} placements, while a brute force would have built all ${N ** N} complete one-queen-per-row boards (1,820 if queens could land anywhere) before checking a single one. Every undo pruned an entire subtree of doomed boards.`,
         codeLine: 1,
+        vars: mkVars(N, '—'),
       })
       return true
     }
@@ -71,8 +92,9 @@ function generateSteps(): Step<NQState>[] {
             : `the queen at (${ar}, ${ac}) sees it diagonally: ${row - ar} rows down, ${Math.abs(col - ac)} column${Math.abs(col - ac) === 1 ? '' : 's'} over`
         steps.push({
           state: snap({ tryPos: [row, col], conflictPos: attacker, caption: `row ${row} · trying col ${col} — attacked` }),
-          description: `Row ${row}, col ${col}: ${why}. No point exploring rows ${row + 1}–${N - 1} under a broken board — skip this column immediately.`,
+          description: `Row ${row}, col ${col}: ${why}. No point exploring rows ${row + 1}–${N - 1} under a broken board — this column is pruned on the spot.`,
           codeLine: 3,
+          vars: mkVars(row, col),
         })
         continue
       }
@@ -81,6 +103,7 @@ function generateSteps(): Step<NQState>[] {
         state: snap({ tryPos: [row, col], caption: `row ${row} · placed at col ${col}` }),
         description: `Row ${row}, col ${col}: no placed queen shares this column or diagonal — safe. Commit queen #${row + 1} here and descend to row ${row + 1}. If that choice turns out wrong, we can always take it back.`,
         codeLine: 4,
+        vars: mkVars(row, col),
       })
       if (solve(row + 1)) return true
       queens.pop()
@@ -93,6 +116,7 @@ function generateSteps(): Step<NQState>[] {
         state: snap({ removedPos: [row, col], caption: `backtrack · row ${row} reopened` }),
         description: `No valid square in row ${row + 1} — every column there is attacked while this queen stands. Undo row ${row}: lift the queen off (${row}, ${col}) and ${next}.`,
         codeLine: 6,
+        vars: mkVars(row, col),
       })
     }
     return false
@@ -280,7 +304,7 @@ export const dfsBacktracking: AlgorithmModule<NQState> = {
     time: 'O(N!) for N-Queens — O(bᵈ) in general',
     space: 'O(N) — recursion depth plus one shared board',
     explanation:
-      'Row 0 has N column choices, but each placed queen kills at least one column for every later row, so row 1 has at most N−1 viable choices, row 2 at most N−2, and so on — the search tree is bounded by N·(N−1)·(N−2)···, i.e. N!, and pruning typically visits far less. In general the tree has branching factor b and depth d, giving O(bᵈ) worst case. Space stays tiny because all branches share ONE board: the recursion stack holds at most d frames, and un-choosing on the way back up means we never copy state per branch.',
+      'Row 0 has N column choices, but each placed queen kills at least one column for every later row, so row 1 has at most N−1 viable choices, row 2 at most N−2, shrinking each level — the search tree is bounded by N·(N−1)·(N−2)···, i.e. N!, and pruning typically visits far less. In general the tree has branching factor b and depth d, giving O(bᵈ) worst case. Space stays tiny because all branches share ONE board: the recursion stack holds at most d frames, and un-choosing on the way back up means we never copy state per branch.',
   },
   generateSteps,
   Visualizer,

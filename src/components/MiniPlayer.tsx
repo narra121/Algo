@@ -3,6 +3,7 @@ import type { AttemptDemo } from '../core/types'
 import { useStepPlayer } from '../core/useStepPlayer'
 import { PlayerControls } from './PlayerControls'
 import { Narration } from './Narration'
+import { VariablesPanel } from './VariablesPanel'
 
 /**
  * Collapsed-by-default embedded step player for one approach (brute force or
@@ -73,6 +74,7 @@ function MiniPlayerBody({
       <div className="viz-stage">
         <Visualizer step={player.step} />
       </div>
+      <VariablesPanel vars={player.step.vars} />
       <PlayerControls player={player} />
       <Narration key={player.index} text={player.step.description} />
     </div>
