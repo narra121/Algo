@@ -104,18 +104,6 @@ function makeGrid(
   )
 }
 
-function StandardLegend(): React.ReactElement {
-  return (
-    <div className="legend">
-      <span className="key"><span className="swatch mint" /> current frontier</span>
-      <span className="key"><span className="swatch amber" /> target T</span>
-      <span className="key"><span className="swatch rose" /> wall</span>
-      <span className="key"><span className="swatch sky" /> highlighted path</span>
-      <span className="key"><span className="swatch" /> unexplored</span>
-    </div>
-  )
-}
-
 /* ─────────────────────────────────────────────────────────────────────────────
    Demo 1 — Naive brute-force (exhaustive backtracking)
    Honest simulation: finds all 6 routes (12, 16, 18, 20, 24, 26 moves),
@@ -199,7 +187,7 @@ function naiveSteps(): Step<NaiveState>[] {
       state: { currentPath: path, routeLengths, totalSteps: cumulativeSteps, done: false },
       description:
         i === 0
-          ? `Route 1 found after ${cumulativeSteps} recursive calls: ${moves} moves — the DFS happened to find the optimal path first, but it CANNOT declare this "best" yet. It must keep searching every remaining branch to confirm no shorter route exists.`
+          ? `Route 1 found after ${cumulativeSteps} recursive calls: ${moves} moves — the wandering first route is the LONGEST of all six. Enumeration has no idea better ones exist until it tries them all; it must keep searching every remaining branch before it can return anything.`
           : `Route ${i + 1} found: ${moves} moves (cumulative calls: ${cumulativeSteps}). So far seen [${routeLengths.join(', ')}] — the brute force must exhaust every branch before returning the minimum.`,
       codeLine: 2,
     })
@@ -808,7 +796,7 @@ function IDViz({ step }: { step: Step<IDState> }): React.ReactElement {
   const legend = (
     <div className="legend">
       <span className="key"><span className="swatch mint" /> DFS frontier (this cap)</span>
-      <span className="key"><span className="swatch" style={{ background: 'rgba(148,163,184,0.35)' }} /> visited this cap</span>
+      <span className="key"><span className="swatch mint" /> visited this cap</span>
       <span className="key"><span className="swatch amber" /> target T</span>
       <span className="key"><span className="swatch rose" /> wall</span>
     </div>

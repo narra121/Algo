@@ -404,7 +404,7 @@ export const bfs: AlgorithmModule<BFSState> = {
       space: 'O(cap)',
       verdict: 'partial',
       breaks:
-        'Finally correct: cap 12 is the first to touch T, and that PROVES 12 is minimal without enumerating all 6 routes. But every new cap restarts from scratch, so caps 1 through 12 burn 250 cell visits on this maze — even more than the 165 the exhaustive search took — because the cells near S get re-walked twelve times over.',
+        'Finally correct: cap 12 is the first to touch T, and that PROVES 12 is minimal without enumerating all 6 routes. But every new cap restarts from scratch, so caps 1 through 12 burn 259 cell visits on this maze — even more than the 165 the exhaustive search took — because the cells near S get re-walked twelve times over.',
       insight:
         'The cap idea is exactly right — finish distance 1 completely, then distance 2, then 3. The waste is the restart. Keep each finished distance layer alive, and grow the next layer directly from it.',
       demo: idDemo,
@@ -421,6 +421,7 @@ export const bfs: AlgorithmModule<BFSState> = {
         '    for each neighbor (up, down, left, right):',
         '        if in bounds, not a wall, not yet visited:',
         '            dist[nbr] ← dist[cell] + 1; enqueue(nbr)',
+        'walk parent links back from T to recover the path',
       ],
       time: 'O(V + E)',
       space: 'O(V)',
